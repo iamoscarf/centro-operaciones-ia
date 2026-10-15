@@ -1,0 +1,1267 @@
+<title>Centro de Operaciones IA</title>
+<meta name="description" content="Demo navegable de un equipo de agentes de IA operando un negocio, con detalle por agente y por cliente">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=Figtree:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<style>
+  /* Consola "mission control": panel general → detalle de agente → detalle de cliente.
+     Datos estructurados (DB) listos para cambiarse por una API real. */
+  :root{
+    --bg:#0A0D13; --bg-2:#0E1119; --surface:#131926; --surface-2:#19202F;
+    --border:#232E40; --border-soft:#1A2231;
+    --fg:#E7ECF4; --muted:#8B98AD; --faint:#596579;
+    --accent:#38BDF8; --accent-soft:rgba(56,189,248,.12);
+    --ok:#34D399; --work:#FBBF24; --crit:#F87171; --brain:#A78BFA; --pink:#F472B6;
+    --radius:14px; --radius-sm:10px;
+    --mono:"JetBrains Mono",ui-monospace,"Consolas",monospace;
+    --sans:"Figtree",system-ui,-apple-system,"Segoe UI",sans-serif;
+    --display:"Sora","Figtree",system-ui,sans-serif;
+    color-scheme:dark;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 500px at 78% -8%, rgba(56,189,248,.10), transparent 60%),
+      radial-gradient(760px 480px at 8% 108%, rgba(167,139,250,.08), transparent 60%),
+      var(--bg);
+    color:var(--fg); font-family:var(--sans); line-height:1.45; -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1280px; margin:0 auto; padding-block:18px; padding-left:16px; padding-right:16px;}
+
+  /* ---------- Top bar ---------- */
+  .top{display:flex; align-items:center; gap:16px; flex-wrap:wrap;
+    padding:14px 18px; background:linear-gradient(180deg,var(--surface),var(--bg-2));
+    border:1px solid var(--border); border-radius:var(--radius);}
+  .brand{display:flex; align-items:center; gap:12px; min-width:0; cursor:pointer;}
+  .logo{width:40px; height:40px; border-radius:11px; flex-shrink:0;
+    background:linear-gradient(135deg,var(--accent),#7DD3FC); position:relative;
+    box-shadow:0 0 0 1px rgba(56,189,248,.35), 0 8px 24px rgba(56,189,248,.25);}
+  .logo::before{content:""; position:absolute; inset:9px; border-radius:6px; border:2.5px solid #06202c;}
+  .logo::after{content:""; position:absolute; left:50%; top:50%; width:7px;height:7px;
+    transform:translate(-50%,-50%); border-radius:50%; background:#06202c;}
+  .brand h1{font-family:var(--display); font-size:19px; font-weight:700; margin:0; letter-spacing:-.01em; white-space:nowrap;}
+  .brand .sub{font-family:var(--mono); font-size:11px; color:var(--muted); letter-spacing:.04em; margin-top:1px;}
+  .top-right{margin-left:auto; display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+  .pill{display:inline-flex; align-items:center; gap:7px; font-family:var(--mono);
+    font-size:11.5px; letter-spacing:.03em; padding:7px 12px; border-radius:999px;
+    border:1px solid var(--border); background:var(--surface-2); color:var(--muted);}
+  .live{color:var(--ok); border-color:rgba(52,211,153,.3); background:rgba(52,211,153,.08);}
+  .live .dot{width:8px;height:8px;border-radius:50%;background:var(--ok); animation:ping 1.8s ease-out infinite;}
+  .demo{color:var(--work); border-color:rgba(251,191,36,.3); background:rgba(251,191,36,.07);}
+  .clock{font-variant-numeric:tabular-nums; color:var(--fg);}
+  @keyframes ping{0%{box-shadow:0 0 0 0 rgba(52,211,153,.55)}70%{box-shadow:0 0 0 7px rgba(52,211,153,0)}100%{box-shadow:0 0 0 0 rgba(52,211,153,0)}}
+
+  /* ---------- Breadcrumb ---------- */
+  .crumbs{display:flex; align-items:center; gap:8px; margin-top:14px; font-size:13px; flex-wrap:wrap;}
+  .crumbs a{color:var(--muted); cursor:pointer; text-decoration:none;}
+  .crumbs a:hover{color:var(--accent);}
+  .crumbs .sep{color:var(--faint);}
+  .crumbs .cur{color:var(--fg); font-weight:600;}
+  .back{display:inline-flex; align-items:center; gap:7px; font-size:13px; color:var(--accent); cursor:pointer;
+    padding:7px 13px; border:1px solid var(--border); border-radius:999px; background:var(--surface-2);}
+  .back:hover{border-color:var(--accent);}
+
+  /* ---------- KPIs ---------- */
+  .kpis{display:grid; grid-template-columns:repeat(6,1fr); gap:12px; margin-top:14px;}
+  .kpi{background:var(--surface); border:1px solid var(--border-soft); border-radius:var(--radius); padding:14px 15px;}
+  .kpi.clickable{cursor:pointer; transition:border-color .2s, box-shadow .2s, transform .1s;}
+  .kpi.clickable:hover{border-color:var(--accent); box-shadow:0 10px 28px -14px rgba(56,189,248,.45); transform:translateY(-1px);}
+  .kpi .label{font-size:11.5px; color:var(--muted); letter-spacing:.01em; display:flex; align-items:center; justify-content:space-between; gap:8px;}
+  .kgo{font-size:10.5px; color:var(--accent); font-weight:600; opacity:0; transition:opacity .2s; white-space:nowrap;}
+  .kpi.clickable:hover .kgo{opacity:1;}
+  .kpi .val{font-family:var(--display); font-weight:700; font-size:30px; margin-top:7px; letter-spacing:-.02em;
+    font-variant-numeric:tabular-nums; line-height:1;}
+  .kpi .val.flash{color:var(--accent); transition:color .5s;}
+  .kpi .unit{font-size:13px; color:var(--faint); font-weight:600; margin-left:2px;}
+  .kpi .spark{margin-top:9px; height:18px;} .kpi .spark svg{width:100%; height:100%; overflow:visible;}
+
+  /* ---------- Main grid ---------- */
+  .main{display:grid; grid-template-columns:1fr 360px; gap:14px; margin-top:14px; align-items:start;}
+  .panel{background:var(--bg-2); border:1px solid var(--border); border-radius:var(--radius);}
+  .panel-head{display:flex; align-items:center; gap:10px; padding:13px 16px; border-bottom:1px solid var(--border-soft);}
+  .panel-head h2{font-family:var(--display); font-size:14px; font-weight:600; margin:0; letter-spacing:.01em;}
+  .panel-head .count{font-family:var(--mono); font-size:11px; color:var(--muted); margin-left:auto;}
+
+  /* Agents grid */
+  .agents{display:grid; grid-template-columns:repeat(2,1fr); gap:12px; padding:14px;}
+  .agent{background:var(--surface); border:1px solid var(--border-soft); border-radius:var(--radius-sm);
+    padding:13px 14px; display:flex; flex-direction:column; gap:10px; transition:border-color .2s, box-shadow .2s, transform .1s; cursor:pointer;}
+  .agent:hover{border-color:var(--accent); box-shadow:0 10px 30px -14px rgba(56,189,248,.4); transform:translateY(-1px);}
+  .agent.working{border-color:rgba(56,189,248,.45); box-shadow:0 0 0 1px rgba(56,189,248,.18);}
+  .agent-top{display:flex; align-items:center; gap:11px;}
+  .ava{width:40px; height:40px; border-radius:11px; flex-shrink:0; display:grid; place-items:center;
+    background:var(--surface-2); border:1px solid var(--border);}
+  .ava svg{width:21px; height:21px;}
+  .ava.lg{width:56px; height:56px; border-radius:15px;} .ava.lg svg{width:28px;height:28px;}
+  .agent-id{min-width:0; flex:1;}
+  .agent-id .nm{font-family:var(--display); font-weight:600; font-size:14.5px; letter-spacing:-.01em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .agent-id .rl{font-size:11.5px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .status{display:inline-flex; align-items:center; gap:6px; font-family:var(--mono); font-size:10.5px;
+    letter-spacing:.03em; padding:4px 9px; border-radius:999px; white-space:nowrap;}
+  .status .sd{width:7px;height:7px;border-radius:50%;}
+  .status.idle{color:var(--faint); background:rgba(120,135,160,.08); border:1px solid var(--border-soft);}
+  .status.idle .sd{background:var(--faint);}
+  .status.busy{color:var(--work); background:rgba(251,191,36,.1); border:1px solid rgba(251,191,36,.25);}
+  .status.busy .sd{background:var(--work); animation:blink 1s steps(2,end) infinite;}
+  @keyframes blink{50%{opacity:.25}}
+  .task{font-size:12.5px; color:var(--fg); min-height:17px; opacity:.92;}
+  .task .muted{color:var(--muted);}
+  .bar{height:5px; border-radius:99px; background:var(--surface-2); overflow:hidden;}
+  .bar > i{display:block; height:100%; width:0%; border-radius:99px; background:linear-gradient(90deg,var(--accent),#7DD3FC); transition:width .25s linear;}
+  .tools{display:flex; flex-wrap:wrap; gap:6px;}
+  .tool{font-family:var(--mono); font-size:10px; color:var(--muted); padding:3px 8px; border-radius:7px; background:var(--surface-2); border:1px solid var(--border-soft); letter-spacing:.02em;}
+  .agent-foot{display:flex; align-items:center; justify-content:space-between; font-size:11px; color:var(--faint);}
+  .agent-foot b{color:var(--fg); font-family:var(--mono); font-weight:600;}
+  .seeall{font-size:11.5px; color:var(--accent); font-weight:600;}
+
+  /* Feed */
+  .feed{padding:8px 10px; overflow-y:auto; max-height:560px;}
+  .ev{display:flex; gap:10px; padding:9px 8px; border-radius:9px; align-items:flex-start;}
+  .ev.enter{animation:slideIn .45s ease;}
+  @keyframes slideIn{from{opacity:0; transform:translateY(-6px); background:rgba(56,189,248,.08)}to{opacity:1; transform:none}}
+  .ev .evdot{width:8px;height:8px;border-radius:50%;margin-top:6px;flex-shrink:0;}
+  .ev .evbody{min-width:0;}
+  .ev .evtxt{font-size:12.5px; color:var(--fg);}
+  .ev .evmeta{font-family:var(--mono); font-size:10px; color:var(--faint); margin-top:2px; letter-spacing:.02em;}
+  .ev.done .evtag{color:var(--ok);} .ev.warn .evtag{color:var(--work);} .ev.info .evtag{color:var(--accent);}
+  .evtag{font-weight:600;}
+
+  /* Brain */
+  .brain{display:flex; align-items:center; gap:13px; padding:13px 16px; border-top:1px solid var(--border-soft);}
+  .brain canvas{width:72px; height:54px; flex-shrink:0;}
+  .brain .bt{font-family:var(--display); font-size:13px; font-weight:600;}
+  .brain .bs{font-size:11.5px; color:var(--muted);}
+  .brain .bn{color:var(--brain); font-family:var(--mono); font-weight:600;}
+
+  /* ---------- Command bar ---------- */
+  .cmd{margin-top:14px; background:linear-gradient(180deg,var(--surface),var(--bg-2)); border:1px solid var(--border); border-radius:var(--radius); padding:15px 16px;}
+  .cmd h3{font-family:var(--display); font-size:13px; margin:0 0 3px; font-weight:600;}
+  .cmd p{margin:0 0 12px; font-size:12px; color:var(--muted);}
+  .presets{display:flex; flex-wrap:wrap; gap:9px; margin-bottom:12px;}
+  .preset{font-family:var(--sans); font-size:12.5px; font-weight:500; color:var(--fg); cursor:pointer;
+    padding:9px 14px; border-radius:999px; background:var(--surface-2); border:1px solid var(--border);
+    transition:all .18s; display:inline-flex; align-items:center; gap:7px;}
+  .preset:hover{border-color:var(--accent); color:#fff; box-shadow:0 0 0 3px rgba(56,189,248,.1);}
+  .preset:disabled{opacity:.4; cursor:default; box-shadow:none;}
+  .preset .pg{width:7px;height:7px;border-radius:50%;background:var(--accent);}
+  .inrow{display:flex; gap:10px;}
+  .inrow input{flex:1; min-width:0; background:var(--bg); border:1px solid var(--border); color:var(--fg);
+    font-family:var(--sans); font-size:13.5px; padding:12px 15px; border-radius:11px; outline:none;}
+  .inrow input::placeholder{color:var(--faint);}
+  .inrow input:focus{border-color:var(--accent); box-shadow:0 0 0 3px rgba(56,189,248,.12);}
+  .send{background:var(--accent); color:#04222f; border:none; font-family:var(--display); font-weight:700;
+    font-size:13.5px; padding:0 22px; border-radius:11px; cursor:pointer; transition:filter .15s; flex-shrink:0;}
+  .send:hover{filter:brightness(1.08);} .send:disabled{opacity:.5; cursor:default;}
+
+  /* ---------- Agent detail ---------- */
+  .ahead{display:flex; align-items:center; gap:15px; flex-wrap:wrap; margin-top:14px; padding:18px;
+    background:linear-gradient(180deg,var(--surface),var(--bg-2)); border:1px solid var(--border); border-radius:var(--radius);}
+  .ahead .ai-txt h2{font-family:var(--display); font-size:22px; margin:0; letter-spacing:-.01em;}
+  .ahead .ai-txt .rl{color:var(--muted); font-size:13.5px; margin-top:2px;}
+  .ahead .ai-tools{margin-top:8px;}
+  .ahead .right{margin-left:auto; display:flex; flex-direction:column; align-items:flex-end; gap:8px;}
+
+  .statrow{display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-top:14px;}
+  .stat{background:var(--surface); border:1px solid var(--border-soft); border-radius:var(--radius-sm); padding:14px;}
+  .stat .k{font-size:11.5px; color:var(--muted);}
+  .stat .v{font-family:var(--display); font-weight:700; font-size:24px; margin-top:5px; font-variant-numeric:tabular-nums;}
+
+  .detail-grid{display:grid; grid-template-columns:1fr 340px; gap:14px; margin-top:14px; align-items:start;}
+  .list{padding:8px;}
+  .row{display:flex; align-items:center; gap:13px; padding:13px 12px; border-radius:11px; cursor:pointer;
+    border:1px solid transparent; transition:background .15s, border-color .15s;}
+  .row:hover{background:var(--surface); border-color:var(--border-soft);}
+  .row .rava{width:38px;height:38px;border-radius:10px;flex-shrink:0;display:grid;place-items:center;
+    font-family:var(--display); font-weight:700; font-size:15px; color:#06202c;}
+  .row .rinfo{min-width:0; flex:1;}
+  .row .rn{font-weight:600; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .row .rs{font-size:12px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:1px;}
+  .row .rmeta{display:flex; flex-direction:column; align-items:flex-end; gap:5px; flex-shrink:0;}
+  .row .chev{color:var(--faint); flex-shrink:0;}
+  .badge{display:inline-flex; align-items:center; gap:6px; font-size:11px; font-weight:600; padding:4px 10px; border-radius:999px; white-space:nowrap;}
+  .badge .bd{width:6px;height:6px;border-radius:50%;}
+  .doinghint{font-family:var(--mono); font-size:10.5px; color:var(--work); display:flex; align-items:center; gap:5px;}
+  .doinghint .pls{width:6px;height:6px;border-radius:50%;background:var(--work); animation:blink 1s steps(2,end) infinite;}
+
+  .side-log{padding:10px;} .side-log .ev{padding:8px;}
+
+  /* ---------- Item (client) detail ---------- */
+  .ihead{display:flex; align-items:center; gap:15px; flex-wrap:wrap; margin-top:14px; padding:18px;
+    background:linear-gradient(180deg,var(--surface),var(--bg-2)); border:1px solid var(--border); border-radius:var(--radius);}
+  .ihead .iava{width:58px;height:58px;border-radius:15px;display:grid;place-items:center;font-family:var(--display);font-weight:700;font-size:22px;color:#06202c;flex-shrink:0;}
+  .ihead h2{font-family:var(--display); font-size:22px; margin:0; letter-spacing:-.01em;}
+  .ihead .isub{color:var(--muted); font-size:13px; margin-top:3px; display:flex; gap:12px; flex-wrap:wrap;}
+  .ihead .isub b{color:var(--fg); font-weight:600;}
+  .ihead .right{margin-left:auto;}
+
+  .doing{margin-top:14px; padding:16px 18px; border-radius:var(--radius); border:1px solid rgba(251,191,36,.3);
+    background:linear-gradient(180deg,rgba(251,191,36,.08),rgba(251,191,36,.02)); display:flex; gap:14px; align-items:center;}
+  .doing.calm{border-color:var(--border); background:var(--bg-2);}
+  .doing .dicon{width:42px;height:42px;border-radius:12px;background:rgba(251,191,36,.15);display:grid;place-items:center;flex-shrink:0;}
+  .doing.calm .dicon{background:var(--surface-2);}
+  .doing .dt{font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em;}
+  .doing .dv{font-family:var(--display); font-weight:600; font-size:15px; margin-top:2px;}
+  .doing .dn{font-size:12.5px; color:var(--muted); margin-top:3px;}
+
+  .idetail{display:grid; grid-template-columns:1fr 330px; gap:14px; margin-top:14px; align-items:start;}
+  .chat{padding:16px; display:flex; flex-direction:column; gap:12px; max-height:520px; overflow-y:auto;}
+  .msg{max-width:78%; display:flex; flex-direction:column; gap:3px;}
+  .msg .who{font-family:var(--mono); font-size:10px; color:var(--faint); letter-spacing:.03em;}
+  .msg .bub{padding:10px 13px; border-radius:13px; font-size:13px; line-height:1.5;}
+  .msg.cliente{align-self:flex-start;} .msg.cliente .bub{background:var(--surface-2); border:1px solid var(--border-soft); border-bottom-left-radius:4px;}
+  .msg.agent{align-self:flex-end; align-items:flex-end;} .msg.agent .bub{background:var(--accent-soft); border:1px solid rgba(56,189,248,.28); border-bottom-right-radius:4px;}
+  .msg .tm{font-family:var(--mono); font-size:9.5px; color:var(--faint);}
+  .sysmsg{align-self:center; font-family:var(--mono); font-size:10.5px; color:var(--faint); background:var(--bg); border:1px solid var(--border-soft); padding:5px 12px; border-radius:999px;}
+  /* panel de producción (contenido / reportes) */
+  .prodwrap{padding:16px;}
+  .pstitle{font-family:var(--mono); font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:var(--faint); margin-bottom:10px;}
+  .pstep{display:flex; align-items:center; gap:10px; font-size:13.5px; padding:8px 0; border-bottom:1px solid var(--border-soft);}
+  .pstep:last-of-type{border-bottom:none;}
+  .pstep .pico{font-weight:700; width:16px; text-align:center; flex-shrink:0;}
+  .pstep .pend{color:var(--muted);}
+  .pstep .pnow{font-family:var(--mono); font-size:10px; color:var(--work); margin-left:6px;}
+  .deliver{margin-top:14px; background:var(--bg); border:1px solid var(--border-soft); border-radius:12px; padding:15px 16px;}
+  .dvh{font-family:var(--display); font-weight:600; font-size:13px; color:var(--accent); margin-bottom:9px;}
+  .dvbody{font-size:13px; line-height:1.75; color:var(--fg);}
+  .srcbox{display:flex; gap:12px; align-items:center; background:var(--bg); border:1px solid var(--border-soft); border-radius:12px; padding:12px 14px; margin-bottom:16px;}
+  .srcbox .srcico{font-size:22px; flex-shrink:0;}
+  .srcbox .srck{font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:var(--faint);}
+  .srcbox .srcv{font-size:13px; font-weight:600; margin-top:2px;}
+  .pubrow{display:flex; align-items:center; gap:12px; justify-content:space-between; flex-wrap:wrap; margin-top:16px; padding:14px 16px;
+    background:linear-gradient(180deg,rgba(56,189,248,.08),transparent); border:1px solid rgba(56,189,248,.25); border-radius:12px;}
+  .pubrow .pubk{font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted);}
+  .pubrow .pubv{font-family:var(--display); font-weight:700; font-size:15px; margin-top:2px;}
+  .pubbtn{background:var(--accent); color:#04222f; border:none; font-family:var(--display); font-weight:700; font-size:13px; padding:11px 18px; border-radius:11px; cursor:pointer; display:inline-flex; align-items:center; gap:8px;}
+  .pubbtn:hover{filter:brightness(1.08);} .pubbtn.done{background:var(--ok); cursor:default;}
+
+  .infocard{padding:16px;} .infocard + .infocard{margin-top:12px;}
+  .infocard h4{font-family:var(--display); font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin:0 0 12px;}
+  .kv{display:flex; justify-content:space-between; gap:12px; padding:7px 0; border-bottom:1px solid var(--border-soft); font-size:13px;}
+  .kv:last-child{border-bottom:none;} .kv .k{color:var(--muted);} .kv .v{font-weight:600; text-align:right;}
+  .actlog{display:flex; flex-direction:column; gap:0;}
+  .actlog .a{display:flex; gap:10px; font-size:12.5px; padding:7px 0;}
+  .actlog .a .ad{width:7px;height:7px;border-radius:50%;background:var(--ok);margin-top:5px;flex-shrink:0;}
+  .actlog .a .at{font-family:var(--mono); font-size:10px; color:var(--faint); margin-top:2px;}
+  .nextbtn{margin-top:12px; width:100%; background:var(--accent); color:#04222f; border:none; font-family:var(--display);
+    font-weight:700; font-size:13px; padding:12px; border-radius:11px; cursor:pointer;}
+  .nextbtn:hover{filter:brightness(1.08);}
+
+  .foot{text-align:center; color:var(--faint); font-size:11px; margin-top:18px; font-family:var(--mono); letter-spacing:.03em;}
+  .foot b{color:var(--muted);}
+
+  #toast{position:fixed; left:50%; bottom:calc(20px + env(safe-area-inset-bottom,0px)); transform:translateX(-50%) translateY(20px);
+    background:var(--surface-2); border:1px solid var(--accent); color:var(--fg); font-size:13px; font-weight:500;
+    padding:12px 18px; border-radius:12px; box-shadow:0 16px 40px rgba(0,0,0,.5); opacity:0; pointer-events:none;
+    transition:opacity .25s, transform .25s; z-index:50; max-width:90vw;}
+  #toast.show{opacity:1; transform:translateX(-50%) translateY(0);} #toast .ti{color:var(--accent); margin-right:8px; font-weight:700;}
+
+  /* ---------- Animaciones de entrada ---------- */
+  .viewanim>*{animation:viewIn .5s ease both;}
+  .viewanim>*:nth-child(1){animation-delay:.03s} .viewanim>*:nth-child(2){animation-delay:.09s}
+  .viewanim>*:nth-child(3){animation-delay:.15s} .viewanim>*:nth-child(4){animation-delay:.21s}
+  .viewanim>*:nth-child(5){animation-delay:.27s} .viewanim>*:nth-child(6){animation-delay:.33s}
+  .viewanim>*:nth-child(n+7){animation-delay:.38s}
+  @keyframes viewIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+
+  /* ---------- Resultados / ROI ---------- */
+  .roibtn{color:var(--ok); border-color:rgba(52,211,153,.4); background:rgba(52,211,153,.1); cursor:pointer; font-weight:600;}
+  .roibtn:hover{border-color:var(--ok); color:#fff;}
+  .roi-hero{margin-top:14px; display:flex; align-items:center; gap:14px; flex-wrap:wrap;}
+  .roi-hero h2{font-family:var(--display); font-size:22px; margin:0; letter-spacing:-.01em;}
+  .roi-hero .per{margin-left:auto;}
+  .roi-tiles{display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-top:14px;}
+  .roi-tile{background:var(--surface); border:1px solid var(--border-soft); border-radius:var(--radius); padding:16px;}
+  .roi-tile .rv{font-family:var(--display); font-weight:700; font-size:30px; letter-spacing:-.02em; line-height:1; font-variant-numeric:tabular-nums;}
+  .roi-tile.good .rv{color:var(--ok);}
+  .roi-tile .rk{font-size:12.5px; color:var(--fg); margin-top:7px; font-weight:600;}
+  .roi-tile .rs{font-size:11.5px; color:var(--muted); margin-top:3px;}
+  .roi-two{display:grid; grid-template-columns:1.3fr 1fr; gap:14px; margin-top:14px; align-items:start;}
+  .roi-two2{display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:14px; align-items:start;}
+  .chartwrap{padding:16px;}
+  .legend{display:flex; gap:18px; margin-top:10px; font-size:11.5px; color:var(--muted); flex-wrap:wrap;}
+  .legend span{display:inline-flex; align-items:center; gap:7px;}
+  .legend i{width:18px; border-top:3px solid var(--accent); display:inline-block;}
+  .legend i.dash{border-top-style:dashed; border-color:var(--faint);}
+  .fn{padding:9px 0;}
+  .fn .fnh{display:flex; justify-content:space-between; font-size:13px; margin-bottom:6px;} .fn .fnh b{font-family:var(--mono); font-weight:600;}
+  .fn .fnbar{height:13px; background:var(--surface-2); border-radius:7px; overflow:hidden;}
+  .fn .fnbar i{display:block; height:100%; border-radius:7px;}
+  .ba{display:flex; align-items:center; gap:10px; padding:11px 0; border-bottom:1px solid var(--border-soft); font-size:13px;}
+  .ba:last-child{border-bottom:none;}
+  .ba .bak{flex:1; color:var(--muted); min-width:0;}
+  .ba .bav{display:flex; align-items:center; gap:8px; flex-shrink:0;}
+  .ba .old{color:var(--faint); text-decoration:line-through;}
+  .ba .arr{color:var(--faint);}
+  .ba .new{color:var(--ok); font-weight:600;}
+  .contrib .cb{margin:11px 0;}
+  .contrib .cbh{display:flex; justify-content:space-between; font-size:12.5px; margin-bottom:5px;} .contrib .cbh b{font-family:var(--mono);}
+  .contrib .cbbar{height:10px; background:var(--surface-2); border-radius:6px; overflow:hidden;}
+  .contrib .cbbar i{display:block;height:100%;border-radius:6px;}
+  @media(max-width:860px){ .roi-tiles{grid-template-columns:repeat(2,1fr);} .roi-two,.roi-two2{grid-template-columns:1fr;} }
+
+  /* ---------- Cerebro (vista radial) ---------- */
+  .brainbtn{color:var(--brain); border-color:rgba(167,139,250,.4); background:rgba(167,139,250,.1); cursor:pointer; font-weight:600;}
+  .brainbtn:hover{border-color:var(--brain); color:#fff;}
+  .bx-hero{margin-top:14px;}
+  .bx-hero h2{font-family:var(--display); font-size:22px; margin:0; letter-spacing:-.01em;}
+  .bx-hero p{color:var(--muted); font-size:14px; margin:6px 0 0; max-width:700px;}
+  .brainstage{position:relative; width:100%; max-width:700px; margin:22px auto 4px; aspect-ratio:1/1; overflow:visible;}
+  .bsvg{position:absolute; inset:0; width:100%; height:100%; overflow:visible; pointer-events:none; z-index:0;}
+  .bring{position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); border-radius:50%; border:1px solid rgba(167,139,250,.18); z-index:0;}
+  .bcenter{position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:220px;
+    display:flex; flex-direction:column; align-items:center; text-align:center; z-index:3;}
+  .bglobe{position:relative; width:200px; height:200px;}
+  .bglobe::before{content:""; position:absolute; inset:-16%; border-radius:50%; background:radial-gradient(circle,rgba(167,139,250,.4),transparent 62%); z-index:0; pointer-events:none;}
+  .bglobe canvas{position:relative; z-index:1; width:100%; height:100%; opacity:0; transition:opacity .6s; cursor:grab; contain:layout paint size;}
+  .bfallback{position:absolute; inset:0; z-index:1; display:grid; place-items:center; font-size:58px;}
+  .bglobe.ping{animation:bcorePing .6s ease;}
+  @keyframes bcorePing{0%{transform:scale(1)}45%{transform:scale(1.07)}100%{transform:scale(1)}}
+  .bctitle{font-family:var(--display); font-weight:700; font-size:12.5px; letter-spacing:.09em; margin-top:6px; color:#fff;}
+  .bccount{font-family:var(--mono); font-size:11px; color:#C4B5FD; margin-top:2px;}
+  .bnode{position:absolute; transform:translate(-50%,-50%); width:146px; z-index:2; cursor:pointer;
+    background:var(--surface); border:1px solid var(--border); border-radius:13px; padding:11px 12px; transition:border-color .2s, box-shadow .2s;}
+  .bnode:hover{border-color:var(--accent); box-shadow:0 12px 30px -12px rgba(56,189,248,.55);}
+  .bnrow{display:flex; align-items:center; gap:9px;}
+  .bnico{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;background:var(--surface-2);border:1px solid var(--border);flex-shrink:0;}
+  .bnico svg{width:18px;height:18px;}
+  .bndept{font-family:var(--mono); font-size:9.5px; letter-spacing:.05em; text-transform:uppercase; color:var(--muted);}
+  .bnname{font-size:12px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .bnrep{font-size:10.5px; color:var(--faint); margin-top:7px; border-top:1px solid var(--border-soft); padding-top:6px; min-height:14px; line-height:1.3;}
+  .bx-grid{display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:16px;}
+  .bx-synth{background:linear-gradient(135deg,rgba(167,139,250,.14),var(--bg-2)); border:1px solid rgba(167,139,250,.3); border-radius:var(--radius); padding:18px;}
+  .bx-synth .sh{font-family:var(--mono); font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:#C4B5FD; margin-bottom:10px;}
+  .bx-synth .st{font-family:var(--display); font-size:17px; font-weight:600; line-height:1.45;}
+  .bx-reports{background:var(--bg-2); border:1px solid var(--border); border-radius:var(--radius); display:flex; flex-direction:column;}
+  .bx-reports .rhd{padding:13px 16px; border-bottom:1px solid var(--border-soft); font-family:var(--display); font-weight:600; font-size:14px;}
+  .bx-rlist{padding:8px 10px; max-height:260px; overflow-y:auto;}
+  .brep{display:flex; gap:10px; padding:8px; align-items:flex-start;}
+  .brep.enter{animation:slideIn .45s ease;}
+  .brep .bd{width:8px;height:8px;border-radius:50%;margin-top:5px;flex-shrink:0;}
+  .brep .btx{font-size:12.5px; min-width:0;}
+  .brep .bm{font-family:var(--mono); font-size:9.5px; color:var(--faint); margin-top:2px;}
+  @media (max-width:720px){ .bx-grid{grid-template-columns:1fr;} .brainstage{max-width:470px;} .bnode{width:108px; padding:9px 10px;}
+    .bcenter{width:170px;} .bglobe{width:150px;height:150px;} .bfallback{font-size:44px;} .bnrep{display:none;} }
+  @media (max-width:470px){ .bnode{width:92px; padding:7px 8px;} .bnname{font-size:10.5px;} .bndept{font-size:8.5px;} .bnico{width:28px;height:28px;} .bnico svg{width:15px;height:15px;}
+    .bglobe{width:124px;height:124px;} .bfallback{font-size:36px;} }
+  /* ---------- Conectar mis datos ---------- */
+  .connectbtn{color:var(--accent); border-color:rgba(56,189,248,.4); background:var(--accent-soft); cursor:pointer; font-weight:600;}
+  .connectbtn:hover{border-color:var(--accent); color:#fff;}
+  .cx-hero{margin-top:14px;}
+  .cx-hero h2{font-family:var(--display); font-size:22px; margin:0; letter-spacing:-.01em;}
+  .cx-hero p{color:var(--muted); font-size:14px; margin:6px 0 0; max-width:700px;}
+  .cx-flow{display:flex; align-items:stretch; gap:8px; flex-wrap:nowrap; margin-top:16px; padding:18px;
+    background:var(--bg-2); border:1px solid var(--border); border-radius:var(--radius); overflow-x:auto;}
+  .cx-stage{flex:1; min-width:150px; display:flex; flex-direction:column; gap:8px; justify-content:center;}
+  .cx-stage .lbl{font-family:var(--mono); font-size:10px; letter-spacing:.06em; color:var(--faint); text-transform:uppercase; text-align:center;}
+  .cx-node{background:var(--surface); border:1px solid var(--border-soft); border-radius:12px; padding:12px 14px; transition:border-color .3s, box-shadow .3s;}
+  .cx-node .nt{font-size:12.5px; font-weight:600;} .cx-node .ns{font-size:11px; color:var(--muted); margin-top:2px;}
+  .cx-node.on{border-color:var(--ok); box-shadow:0 0 0 1px rgba(52,211,153,.2);}
+  .cx-brain{background:linear-gradient(135deg,rgba(167,139,250,.14),var(--surface)); border:1px solid rgba(167,139,250,.35); border-radius:14px; padding:18px 14px; text-align:center;}
+  .cx-brain .bt{font-family:var(--display); font-weight:700; font-size:15px; color:var(--brain);}
+  .cx-brain .bs{font-size:11px; color:var(--muted); margin-top:3px;}
+  .cx-result{text-align:center;}
+  .cx-result .rv{font-family:var(--display); font-weight:700; font-size:24px; font-variant-numeric:tabular-nums; line-height:1;}
+  .cx-result .rk{font-size:11px; color:var(--muted); margin-top:4px;}
+  .cx-arrow{position:relative; align-self:center; flex:0 0 42px; height:3px; background:var(--border); border-radius:2px;}
+  .cx-arrow::after{content:''; position:absolute; right:-5px; top:-4px; border-left:8px solid var(--border); border-top:5.5px solid transparent; border-bottom:5.5px solid transparent;}
+  .cx-arrow.active{background:linear-gradient(90deg,var(--accent),var(--brain));}
+  .cx-arrow.active::after{border-left-color:var(--brain);}
+  .cx-arrow .fd{position:absolute; top:-2px; left:-6px; width:7px;height:7px;border-radius:50%;background:#fff;box-shadow:0 0 8px var(--accent); opacity:0;}
+  .cx-arrow.active .fd{opacity:1; animation:flowDot 1.1s linear infinite;}
+  @keyframes flowDot{from{left:-6px}to{left:100%}}
+  .cx-preview{display:flex; flex-wrap:wrap; gap:7px; margin-top:12px; min-height:4px;}
+  .cx-chip{font-size:11.5px; background:var(--surface-2); border:1px solid var(--border-soft); border-radius:999px; padding:5px 11px; animation:slideIn .4s ease;}
+  .cx-chip .d{display:inline-block; width:6px;height:6px;border-radius:50%;background:var(--ok); margin-right:6px;}
+  .cx-cards{display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-top:16px;}
+  .cx-card{background:var(--surface); border:1px solid var(--border-soft); border-radius:var(--radius); padding:18px; display:flex; flex-direction:column; gap:11px; transition:border-color .3s;}
+  .cx-card.connected{border-color:var(--ok);}
+  .cxi{width:46px;height:46px;border-radius:12px;display:grid;place-items:center;font-size:24px;background:var(--surface-2);border:1px solid var(--border);}
+  .cx-card h3{font-family:var(--display); font-size:15.5px; margin:0;}
+  .cx-card .cd{font-size:12.5px; color:var(--muted); flex:1; line-height:1.5;}
+  .cx-card .cxfeeds{font-size:11.5px; color:var(--muted);} .cx-card .cxfeeds b{color:var(--accent); font-weight:600;}
+  .cx-card .via{font-family:var(--mono); font-size:10.5px; color:var(--faint); padding:7px 10px; background:var(--bg); border:1px solid var(--border-soft); border-radius:8px;}
+  .cxbtn{background:var(--accent); color:#04222f; border:none; font-family:var(--display); font-weight:700; font-size:13px; padding:11px; border-radius:10px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px;}
+  .cxbtn:hover{filter:brightness(1.08);} .cxbtn.ok{background:var(--ok); cursor:default;}
+  .spin{width:14px;height:14px;border-radius:50%;border:2px solid rgba(4,34,47,.3);border-top-color:#04222f;animation:spin .7s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .cx-reassure{display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-top:16px;}
+  .cx-re{background:var(--bg-2); border:1px solid var(--border-soft); border-radius:12px; padding:14px;}
+  .cx-re .rh{font-weight:700; color:var(--ok); display:flex; align-items:center; gap:7px; margin-bottom:5px; font-size:13px;}
+  .cx-re .rt{color:var(--muted); font-size:12px; line-height:1.5;}
+  .cx-go{margin-top:18px; text-align:center;}
+  .cx-go button{background:var(--accent); color:#04222f; border:none; font-family:var(--display); font-weight:700; font-size:14px; padding:13px 26px; border-radius:12px; cursor:pointer;}
+  .cx-go button:hover{filter:brightness(1.08);}
+  @media (max-width:880px){
+    .cx-cards{grid-template-columns:1fr;}
+    .cx-reassure{grid-template-columns:repeat(2,1fr);}
+    .cx-flow{flex-direction:column; align-items:stretch; overflow-x:visible;}
+    .cx-stage{min-width:0;}
+    .cx-arrow{flex:0 0 auto; width:2px; height:24px; align-self:center;}
+    .cx-arrow::after{display:none;} .cx-arrow .fd{display:none;}
+    .cx-arrow.active{background:linear-gradient(180deg,var(--accent),var(--brain));}
+  }
+  @media (max-width:1040px){
+    .kpis{grid-template-columns:repeat(3,1fr);}
+    .main,.detail-grid,.idetail{grid-template-columns:1fr;}
+    .statrow{grid-template-columns:repeat(2,1fr);}
+    .feed{max-height:380px;}
+  }
+  @media (max-width:560px){
+    .agents{grid-template-columns:1fr;} .kpis{grid-template-columns:repeat(2,1fr);}
+    .kpi .val{font-size:25px;} .brand h1{font-size:17px;} .inrow{flex-direction:column;} .send{padding:12px;}
+    .msg{max-width:90%;}
+  }
+  @media (prefers-reduced-motion:reduce){ *{animation:none!important; transition:none!important;} }
+</style>
+
+<div class="wrap">
+  <!-- TOP BAR -->
+  <div class="top">
+    <div class="brand" id="brandHome">
+      <div class="logo"></div>
+      <div>
+        <h1>Centro de Operaciones IA</h1>
+        <div class="sub" id="brandTag">tu-negocio.ia · equipo autónomo</div>
+      </div>
+    </div>
+    <div class="top-right">
+      <span class="pill roibtn" id="roiBtn">📈 Resultados</span>
+      <span class="pill brainbtn" id="brainBtn">🧠 Cerebro</span>
+      <span class="pill connectbtn" id="connectBtn">🔌 Conectar mis datos</span>
+      <span class="pill demo">DEMO · datos de ejemplo</span>
+      <span class="pill clock" id="clock">--:--:--</span>
+      <span class="pill live"><span class="dot"></span> EN VIVO</span>
+    </div>
+  </div>
+
+  <!-- Breadcrumb (sub-views only) -->
+  <div class="crumbs" id="crumbs" hidden></div>
+
+  <!-- ============ OVERVIEW ============ -->
+  <div id="viewOverview">
+    <div class="kpis" id="kpis"></div>
+    <div class="main">
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Equipo de agentes</h2>
+          <span class="count" id="agentCount">0 trabajando</span>
+        </div>
+        <div class="agents" id="agents"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h2>Actividad en vivo</h2><span class="count" id="feedCount">0 eventos hoy</span></div>
+        <div class="feed" id="feed"></div>
+        <div class="brain">
+          <canvas id="brainCanvas" width="144" height="108"></canvas>
+          <div><div class="bt">El Cerebro</div><div class="bs">Memoria compartida · <span class="bn" id="brainNotes">1,842</span> notas</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="cmd">
+      <h3>Dale una orden a tu equipo</h3>
+      <p>Elige una tarea o escribe la tuya. Los agentes se reparten el trabajo y lo ejecutan en paralelo.</p>
+      <div class="presets" id="presets"></div>
+      <div class="inrow">
+        <input id="cmdInput" type="text" placeholder="Ej: contacta a los leads de hoy y agenda a los interesados…" autocomplete="off">
+        <button class="send" id="sendBtn">Ejecutar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ AGENT DETAIL ============ -->
+  <div id="viewAgent" hidden></div>
+
+  <!-- ============ ITEM DETAIL ============ -->
+  <div id="viewItem" hidden></div>
+
+  <!-- ============ CONECTAR MIS DATOS ============ -->
+  <div id="viewConnect" hidden></div>
+
+  <!-- ============ CEREBRO ============ -->
+  <div id="viewBrain" hidden></div>
+
+  <!-- ============ RESULTADOS / ROI ============ -->
+  <div id="viewRoi" hidden></div>
+
+  <div class="foot">SIMULACIÓN DE DEMOSTRACIÓN — <b>datos de ejemplo</b>. Cada agente, cliente y conversación es un registro estructurado, listo para conectarse a datos reales (API / base de datos).</div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+(function(){
+  "use strict";
+  var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion:reduce)").matches;
+  var $=function(id){return document.getElementById(id);};
+  function pad(n){return n<10?'0'+n:''+n;}
+  function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+  function initials(name){return name.split(' ').map(function(w){return w[0];}).slice(0,2).join('').toUpperCase();}
+
+  // ---------- Icons ----------
+  var ICON={
+    chat:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-8.5 8.3 9 9 0 0 1-3.9-.8L3 20l1.3-4a8 8 0 0 1-.8-3.5A8.4 8.4 0 0 1 12 3.5a8.4 8.4 0 0 1 9 8z"/></svg>',
+    cal:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9h18M8 2.5v4M16 2.5v4"/></svg>',
+    revive:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 4v5h-5"/></svg>',
+    chart:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V4M4 20h16"/><path d="M8 16l3.5-4 3 2.5L20 8"/></svg>',
+    spark:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 15l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7z"/></svg>',
+    star:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9 6.8 19.2l1-5.8L3.5 9.2l5.9-.9z"/></svg>',
+    chev:'<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>',
+    bolt:'<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#FBBF24" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4.5 13H11l-1 9 8.5-11H12z"/></svg>',
+    check:'<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#34D399" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>',
+    coin:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6"/><path d="M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg>',
+    support:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13v-1a8 8 0 0 1 16 0v1"/><rect x="2.5" y="13" width="4" height="6" rx="2"/><rect x="17.5" y="13" width="4" height="6" rx="2"/><path d="M20 19a4 4 0 0 1-4 3h-2"/></svg>',
+    legal:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg>'
+  };
+
+  // ---------- Status styles ----------
+  var ST={
+    nuevo:{c:'var(--accent)',bg:'rgba(56,189,248,.1)',t:'Nuevo'},
+    activo:{c:'var(--work)',bg:'rgba(251,191,36,.1)',t:'En proceso'},
+    agendado:{c:'var(--ok)',bg:'rgba(52,211,153,.1)',t:'Agendado'},
+    frio:{c:'var(--crit)',bg:'rgba(248,113,113,.1)',t:'Frío'},
+    ganado:{c:'var(--ok)',bg:'rgba(52,211,153,.12)',t:'Ganado'},
+    listo:{c:'var(--ok)',bg:'rgba(52,211,153,.1)',t:'Listo'},
+    pend:{c:'var(--work)',bg:'rgba(251,191,36,.1)',t:'Pendiente'}
+  };
+  function badge(key){var s=ST[key]||ST.nuevo; return '<span class="badge" style="color:'+s.c+';background:'+s.bg+'"><span class="bd" style="background:'+s.c+'"></span>'+s.t+'</span>';}
+
+  // ---------- DATA (estructurado, reemplazable por API real) ----------
+  // item: {id,name,sub,status,value,channel,score,last,doing(bool),doingText,next,
+  //        fields:[{k,v}], acts:[{t,text}], chat:[{who,text,tm}]}
+  var AGENTS=[
+    {id:'leads',nm:'Agente de Leads',rl:'Responde y califica clientes nuevos',icon:'chat',color:'#38BDF8',
+     tools:['WhatsApp','Messenger','CRM'], itemWord:'clientes',
+     items:[
+      {id:'carlos',name:'Carlos Méndez',sub:'“Me interesa, ¿me das más info?”',status:'activo',value:'$1,200',channel:'WhatsApp',score:'Alto',last:'hace 3 min',
+        doing:true,doingText:'Redactando respuesta y proponiendo una llamada',next:'Enviar recordatorio en 2 h si no responde',
+        fields:[['Canal','WhatsApp'],['Interés','Alto (87/100)'],['Valor estimado','$1,200'],['Origen','Anuncio Meta'],['Etapa','Calificado']],
+        acts:[['hace 3 min','Mensaje entrante detectado y leído'],['hace 3 min','Intención clasificada: compra, urgencia media'],['hace 2 min','Buscó al cliente en el CRM'],['hace 2 min','Generó respuesta personalizada (en revisión)']],
+        chat:[['cliente','Hola, vi tu anuncio. Me interesa, ¿me das más info?','10:42'],['agent','¡Hola Carlos! Claro, con gusto te explico cómo funciona. ¿Te va bien una llamada rápida para ver tu caso?','10:42'],['cliente','Sí, ¿cuánto cuesta y cuándo podemos hablar?','10:43'],['agent','Te lo aterrizo en la llamada según lo que necesites. Tengo espacio mañana a las 11:00 AM o a las 4:00 PM. ¿Cuál te queda?','10:43'],['sistema','Esperando respuesta del cliente — seguimiento automático en 2 h','']]},
+      {id:'ana',name:'Ana Gómez',sub:'Cita confirmada para hoy 5:00 PM',status:'agendado',value:'$1,800',channel:'WhatsApp',score:'Alto',last:'hace 20 min',
+        doing:false,doingText:'En espera de la cita',next:'Enviar recordatorio 1 h antes de la cita',
+        fields:[['Canal','WhatsApp'],['Interés','Alto'],['Valor estimado','$1,800'],['Origen','Instagram'],['Etapa','Cita agendada']],
+        acts:[['hace 1 h','Lead respondido en 41s'],['hace 55 min','Calificado como interés alto'],['hace 20 min','Cita agendada: hoy 5:00 PM'],['hace 20 min','Evento creado en Google Calendar']],
+        chat:[['cliente','Me interesa, ¿podemos hablar hoy?','09:30'],['agent','¡Claro Ana! Te agendo hoy a las 5:00 PM. ¿Te queda bien?','09:30'],['cliente','Perfecto 👍','09:31'],['agent','Agendado ✅ Te mando un recordatorio 1 hora antes. ¡Hablamos!','09:31']]},
+      {id:'daniela',name:'Daniela Ríos',sub:'Nuevo lead — sin contactar',status:'nuevo',value:'—',channel:'Messenger',score:'Por calificar',last:'hace 1 min',
+        doing:true,doingText:'Clasificando intención y preparando primer mensaje',next:'Enviar primer mensaje de contacto',
+        fields:[['Canal','Messenger'],['Interés','Por calificar'],['Origen','Anuncio Meta'],['Etapa','Nuevo']],
+        acts:[['hace 1 min','Lead recibido desde campaña Meta'],['hace 1 min','Datos guardados en el CRM'],['hace 30 s','Clasificando intención…']],
+        chat:[['cliente','Hola, quiero información','11:05'],['sistema','Agente preparando primer mensaje…','']]},
+      {id:'pedro',name:'Pedro Luna',sub:'Reactivado tras 6 días de silencio',status:'activo',value:'$1,400',channel:'WhatsApp',score:'Medio',last:'hace 40 min',
+        doing:false,doingText:'Esperando respuesta a la oferta de reenganche',next:'Si no responde en 24 h, marcar como perdido',
+        fields:[['Canal','WhatsApp'],['Interés','Medio'],['Valor estimado','$1,400'],['Origen','Referido'],['Etapa','Reactivación']],
+        acts:[['hace 6 días','Última conversación sin cierre'],['hace 40 min','Detectado como cliente frío'],['hace 40 min','Enviada oferta de reenganche']],
+        chat:[['agent','Hola Pedro, te guardé una condición especial esta semana. ¿Retomamos?','10:15'],['sistema','Esperando respuesta — límite en 24 h','']]},
+      {id:'jorge',name:'Jorge Torres',sub:'Venta cerrada — $2,400',status:'ganado',value:'$2,400',channel:'WhatsApp',score:'Cerrado',last:'ayer',
+        doing:false,doingText:'Entregado al Agente de Reseñas',next:'Solicitar reseña 5★',
+        fields:[['Canal','WhatsApp'],['Resultado','Ganado'],['Valor','$2,400'],['Origen','Google'],['Etapa','Cerrado']],
+        acts:[['ayer','Negociación completada'],['ayer','Venta registrada en el CRM'],['ayer','Pasado al Agente de Reseñas']],
+        chat:[['cliente','Listo, lo tomo','16:20'],['agent','¡Excelente decisión Jorge! Dejo todo listo. Gracias por tu confianza 🙌','16:20']]}
+     ]},
+    {id:'citas',nm:'Agente de Citas',rl:'Agenda y confirma en tu calendario',icon:'cal',color:'#34D399',
+     tools:['Google Calendar','WhatsApp'], itemWord:'citas',
+     items:[
+      {id:'cita1',name:'Ana Gómez — 5:00 PM',sub:'Hoy · confirmada',status:'agendado',value:'Hoy 17:00',channel:'Calendar',score:'Confirmada',last:'hace 20 min',
+        doing:false,doingText:'Recordatorio programado',next:'Enviar recordatorio a las 16:00',
+        fields:[['Fecha','Hoy 5:00 PM'],['Cliente','Ana Gómez'],['Tipo','Cita'],['Estado','Confirmada']],
+        acts:[['hace 20 min','Cita creada en Google Calendar'],['hace 20 min','Confirmación enviada por WhatsApp']],
+        chat:[['agent','Ana, confirmado hoy 5:00 PM ✅','09:31'],['cliente','Perfecto 👍','09:31']]},
+      {id:'cita2',name:'Luis Ramos — jueves',sub:'Reprogramada',status:'pend',value:'Jue 10:00',channel:'Calendar',score:'Por confirmar',last:'hace 1 h',
+        doing:true,doingText:'Esperando confirmación del nuevo horario',next:'Reconfirmar 1 día antes',
+        fields:[['Fecha','Jueves 10:00 AM'],['Cliente','Luis Ramos'],['Tipo','Cita'],['Estado','Por confirmar']],
+        acts:[['hace 1 h','Cliente pidió reprogramar'],['hace 1 h','Nuevo horario propuesto: jueves 10:00']],
+        chat:[['cliente','¿Podemos moverla al jueves?','08:50'],['agent','Claro Luis, te propongo jueves 10:00 AM. ¿Confirmas?','08:50']]},
+      {id:'cita3',name:'4 recordatorios de hoy',sub:'Enviados automáticamente',status:'listo',value:'4 enviados',channel:'WhatsApp',score:'OK',last:'hace 2 h',
+        doing:false,doingText:'Completado',next:'—',
+        fields:[['Recordatorios','4'],['Entregados','4'],['Estado','Enviados']],
+        acts:[['hace 2 h','Recordatorios enviados a 4 clientes'],['hace 2 h','2 confirmaciones recibidas']],
+        chat:[['sistema','Lote de recordatorios enviado · 4/4 entregados','']]}
+     ]},
+    {id:'segui',nm:'Agente de Seguimiento',rl:'Detecta y reactiva clientes fríos',icon:'revive',color:'#FBBF24',
+     tools:['CRM','WhatsApp'], itemWord:'clientes fríos',
+     items:[
+      {id:'maria',name:'María Paredes',sub:'7 días sin respuesta — reactivando',status:'frio',value:'$680',channel:'WhatsApp',score:'Rescatable',last:'hace 15 min',
+        doing:true,doingText:'Enviando segundo intento de reenganche',next:'Escalar a humano si no responde hoy',
+        fields:[['Días inactiva','7'],['Valor','$680'],['Intentos','2'],['Estado','Frío']],
+        acts:[['hace 7 días','Última interacción'],['hace 15 min','Detectada como fría'],['hace 15 min','Primer mensaje de reenganche enviado']],
+        chat:[['agent','Hola María, ¿seguimos con lo que hablamos? Tengo algo que te va a interesar 😊','10:50'],['sistema','Sin respuesta — segundo intento programado','']]},
+      {id:'cold2',name:'3 leads de 72 h',sub:'Cerca del límite de SLA',status:'frio',value:'—',channel:'CRM',score:'Urgente',last:'hace 30 min',
+        doing:true,doingText:'Priorizando antes de que venza el tiempo',next:'Contactar en orden de valor',
+        fields:[['Leads','3'],['Límite','72 h'],['Estado','Urgente']],
+        acts:[['hace 30 min','3 leads detectados cerca del límite'],['hace 29 min','Ordenados por valor estimado']],
+        chat:[['sistema','3 leads en riesgo de vencer SLA · priorizados','']]},
+      {id:'recovered',name:'4 recuperados hoy',sub:'Respondieron a la oferta',status:'ganado',value:'+$3,200',channel:'WhatsApp',score:'Recuperados',last:'hace 1 h',
+        doing:false,doingText:'Devueltos al flujo de ventas',next:'Seguimiento normal',
+        fields:[['Recuperados','4'],['Valor recuperado','$3,200'],['Estado','Activos de nuevo']],
+        acts:[['hace 1 h','4 clientes respondieron a la oferta'],['hace 1 h','Reintegrados al pipeline']],
+        chat:[['sistema','4 clientes reactivados · devueltos al Agente de Leads','']]}
+     ]},
+    {id:'report',nm:'Agente de Reportes',rl:'Resume y recomienda qué hacer',icon:'chart',color:'#A78BFA',
+     tools:['CRM','Hojas de cálculo'], itemWord:'reportes',
+     items:[
+      {id:'daily',name:'Resumen de hoy',sub:'+12% vs ayer · cierre 31%',status:'listo',value:'Enviado',channel:'WhatsApp',score:'Hoy',last:'hace 2 h',
+        doing:false,doingText:'Enviado a tu WhatsApp',next:'Generar reporte de mañana 8:00 AM',
+        fields:[['Leads hoy','47'],['Citas','12'],['Cierre','31%'],['Vs ayer','+12%']],
+        acts:[['hace 2 h','Datos consolidados del CRM'],['hace 2 h','Resumen generado y enviado']],
+        process:[['Datos del CRM leídos','done'],['Métricas calculadas','done'],['Recomendación generada','done'],['Enviado a tu WhatsApp','done']],
+        output:{title:'Resumen enviado a tu WhatsApp',body:'📊 <b>Hoy:</b> 47 leads · 12 citas · cierre 31% (+12% vs ayer).<br>💰 Pipeline en seguimiento: $28,400.<br>✅ <b>Recomendación:</b> prioriza 3 leads de alto valor sin cita y reactiva 2 clientes fríos antes de las 6 PM.'}},
+      {id:'week',name:'Reporte semanal',sub:'En preparación',status:'pend',value:'Viernes',channel:'Hojas',score:'Programado',last:'hace 10 min',
+        doing:true,doingText:'Analizando la tendencia de la semana',next:'Entregar viernes 6:00 PM',
+        fields:[['Periodo','Lun–Dom'],['Estado','En preparación']],
+        acts:[['hace 10 min','Iniciado análisis semanal'],['hace 9 min','Comparando con semana previa']],
+        process:[['Recopilar datos de la semana','done'],['Comparar vs semana previa','doing'],['Redactar conclusiones','pend'],['Entregar viernes 6 PM','pend']],
+        output:{title:'Avance del reporte',body:'Procesando métricas de lunes a domingo para detectar el mejor día, el mejor canal y en qué punto se cae el cierre. Entrega: <b>viernes 6:00 PM</b>.'}}
+     ]},
+    {id:'conten',nm:'Agente de Contenido',rl:'Convierte tu negocio en contenido para redes',icon:'spark',color:'#F472B6',
+     tools:['IA de guion','Canva','CapCut','Instagram API'], itemWord:'piezas',
+     items:[
+      {id:'reeledit',name:'Reel desde tu grabación',sub:'Tu video → editado con subtítulos',status:'listo',value:'38 s',channel:'CapCut',score:'Listo',last:'hace 12 min',
+        doing:false,doingText:'Editado y listo para aprobar',next:'Aprobar y publicar',
+        source:{mode:'subido',text:'Partió de un video que TÚ subiste (1:24 min)'},
+        publishTo:'@tu_negocio',
+        fields:[['Entrada','Tu video (1:24)'],['Resultado','Reel 9:16 · 38 s'],['Incluye','Subtítulos + cortes + música'],['Estado','Listo']],
+        acts:[['hace 20 min','Video recibido de ti'],['hace 16 min','Pausas y silencios recortados'],['hace 14 min','Reencuadrado a 9:16'],['hace 12 min','Subtítulos y música añadidos']],
+        process:[['Tu video recibido','done'],['Cortes y limpieza','done'],['Reencuadre a 9:16','done'],['Subtítulos + música','done'],['Aprobación','pend']],
+        output:{title:'Reel editado (a partir de tu video)',body:'Tomé tu grabación de <b>1:24</b>, le quité las pausas, la dejé vertical <b>9:16</b>, le puse <b>subtítulos animados</b> y música. Quedó en <b>38 s</b>, lista para publicar.'}},
+      {id:'reel',name:'Reel de la semana',sub:'“3 procesos con IA” · generado por IA',status:'listo',value:'45 s',channel:'CapCut',score:'Listo',last:'hace 25 min',
+        doing:false,doingText:'Listo para aprobar y publicar',next:'Aprobar y publicar',
+        source:{mode:'ia',text:'Generado por IA desde un guion (no subiste ningún video)'},
+        publishTo:'@tu_negocio',
+        fields:[['Entrada','Guion (IA)'],['Formato','Reel 9:16 · 45 s'],['Plataforma','Instagram / TikTok'],['Estado','Listo']],
+        acts:[['hace 1 h','Tema elegido según lo que más engancha'],['hace 40 min','Guion generado'],['hace 30 min','Animación y voz creadas'],['hace 25 min','Subtítulos y música añadidos']],
+        process:[['Tema elegido','done'],['Guion escrito','done'],['Animación + voz','done'],['Subtítulos + música','done'],['Aprobación','pend']],
+        output:{title:'Guion del reel (45 s)',body:'<b>Gancho:</b> “¿Pierdes clientes por no responder a tiempo?”<br><b>Paso 1:</b> Un bot con IA contesta en segundos, 24/7.<br><b>Paso 2:</b> Agenda la cita por ti.<br><b>Paso 3:</b> Te avisa de los clientes que estás por perder.<br><b>Cierre:</b> “Comenta IA y te muestro cómo.”'}},
+      {id:'posts',name:'3 posts para IG',sub:'Diseñados en Canva',status:'listo',value:'3 piezas',channel:'Canva',score:'Listo',last:'hace 50 min',
+        doing:false,doingText:'Listos para aprobar y programar',next:'Aprobar y programar',
+        source:{mode:'ia',text:'Diseñados por IA en Canva desde una idea (no subiste nada)'},
+        publishTo:'@tu_negocio',
+        fields:[['Entrada','Idea (IA)'],['Piezas','3'],['Formato','Carrusel + feed'],['Estado','Listos']],
+        acts:[['hace 1 h','Ideas generadas'],['hace 55 min','Copys escritos'],['hace 50 min','Diseños creados en Canva']],
+        process:[['Ideas definidas','done'],['Copys escritos','done'],['Diseño en Canva','done'],['Aprobación','pend']],
+        output:{title:'Los 3 posts',body:'<b>1.</b> “5 tareas que la IA ya puede hacer en tu negocio hoy”<br><b>2.</b> “Caso real: de 8 horas a 20 minutos al día”<br><b>3.</b> “El error #1 al atender clientes por WhatsApp”'}},
+      {id:'ad',name:'Copy del anuncio',sub:'Campaña de captación',status:'activo',value:'En curso',channel:'Meta Ads',score:'En curso',last:'hace 5 min',
+        doing:true,doingText:'Escribiendo 3 variantes para pruebas A/B',next:'Entregar variantes para revisión',
+        source:{mode:'ia',text:'Generado por IA a partir de tus mejores anuncios'},
+        fields:[['Objetivo','Captación de leads'],['Variantes','3 (A/B)'],['Plataforma','Meta Ads'],['Estado','En curso']],
+        acts:[['hace 8 min','Analizó los anuncios que mejor funcionaron'],['hace 5 min','Redactando variantes…']],
+        process:[['Análisis de anuncios previos','done'],['Redacción de variantes','doing'],['Revisión humana','pend'],['Publicación','pend']],
+        output:{title:'Variantes A/B (en progreso)',body:'<b>A:</b> “Tu competencia ya responde con IA. ¿Y tú?”<br><b>B:</b> “Atiende a cada cliente en 1 minuto, sin contratar a nadie.”<br><b>C:</b> “Convierte tu WhatsApp en un vendedor 24/7.”'}}
+     ]},
+    {id:'resena',nm:'Agente de Reseñas',rl:'Pide y gestiona reseñas',icon:'star',color:'#22D3EE',
+     tools:['Google','WhatsApp'], itemWord:'reseñas',
+     items:[
+      {id:'jorge-r',name:'Jorge Torres',sub:'Reseña 5★ recibida',status:'ganado',value:'5★',channel:'Google',score:'5 estrellas',last:'hace 1 h',
+        doing:false,doingText:'Reseña publicada',next:'Agradecer y pedir referido',
+        fields:[['Cliente','Jorge Torres'],['Calificación','5★'],['Plataforma','Google']],
+        acts:[['hace 2 h','Venta cerrada detectada'],['hace 1 h','Solicitud de reseña enviada'],['hace 1 h','Reseña 5★ recibida']],
+        chat:[['agent','Jorge, ¿nos dejarías una reseña? Te toma 20 segundos 🙏','15:00'],['cliente','Listo, 5 estrellas ⭐⭐⭐⭐⭐','15:40']]},
+      {id:'pending-r',name:'2 solicitudes enviadas',sub:'Esperando respuesta',status:'pend',value:'2 pend.',channel:'WhatsApp',score:'Pendiente',last:'hace 35 min',
+        doing:true,doingText:'Dando seguimiento a las solicitudes',next:'Recordar en 48 h',
+        fields:[['Enviadas','2'],['Respondidas','0'],['Estado','Pendiente']],
+        acts:[['hace 35 min','2 clientes satisfechos detectados'],['hace 35 min','Solicitudes de reseña enviadas']],
+        chat:[['sistema','2 solicitudes de reseña enviadas · en seguimiento','']]}
+     ]},
+    {id:'finanzas',nm:'Agente de Finanzas',rl:'Lleva los números de tu negocio',icon:'coin',color:'#A3E635',
+     tools:['Facturación','Banco','Hojas de cálculo'], itemWord:'reportes',
+     items:[
+      {id:'fin-dia',name:'Resumen financiero de hoy',sub:'Ingresos vs egresos',status:'listo',value:'+$2,330',channel:'Hojas',score:'Hoy',last:'hace 1 h',
+        doing:false,doingText:'Enviado a tu WhatsApp',next:'Reporte de mañana 8:00 AM',
+        fields:[['Ingresos hoy','$3,450'],['Egresos hoy','$1,120'],['Balance','+$2,330'],['Estado','Enviado']],
+        acts:[['hace 1 h','Movimientos del banco leídos'],['hace 1 h','Ingresos y egresos conciliados'],['hace 1 h','Resumen enviado a ti']],
+        process:[['Movimientos leídos','done'],['Conciliación','done'],['Resumen generado','done'],['Enviado a ti','done']],
+        output:{title:'Resumen de hoy',body:'💰 <b>Ingresos:</b> $3,450 · <b>Egresos:</b> $1,120 · <b>Balance:</b> +$2,330.<br>📈 Mejor fuente: ventas por WhatsApp.<br>⚠️ Recordatorio: 3 facturas siguen por cobrar.'}},
+      {id:'fin-cobrar',name:'Facturas por cobrar',sub:'3 pendientes · $2,980',status:'activo',value:'$2,980',channel:'Facturación',score:'Pendiente',last:'hace 30 min',
+        doing:true,doingText:'Enviando recordatorios de pago',next:'Reintentar en 48 h a quien no pague',
+        fields:[['Pendientes','3'],['Monto','$2,980'],['Más antigua','12 días'],['Estado','En gestión']],
+        acts:[['hace 30 min','Detectó 3 facturas vencidas'],['hace 30 min','Recordatorios de pago enviados']],
+        process:[['Facturas vencidas detectadas','done'],['Recordatorios enviados','done'],['Seguimiento de pago','doing'],['Escalar si no pagan','pend']],
+        output:{title:'Por cobrar',body:'3 facturas pendientes por <b>$2,980</b>. Recordatorios enviados a los 3 clientes. 1 ya respondió que paga hoy.'}},
+      {id:'fin-caja',name:'Flujo de caja (30 días)',sub:'Proyección saludable',status:'listo',value:'OK',channel:'Hojas',score:'Proyección',last:'hace 2 h',
+        doing:false,doingText:'Sin alertas',next:'Revisar la próxima semana',
+        fields:[['Caja hoy','$18,200'],['Proyección 30 d','$24,600'],['Riesgo','Bajo'],['Estado','Saludable']],
+        acts:[['hace 2 h','Proyección recalculada con ingresos recientes']],
+        process:[['Datos consolidados','done'],['Proyección calculada','done'],['Sin alertas','done']],
+        output:{title:'Flujo de caja',body:'Caja actual <b>$18,200</b>, proyección a 30 días <b>$24,600</b>. Riesgo bajo. No se requieren acciones.'}}
+     ]},
+    {id:'soporte',nm:'Agente de Atención',rl:'Resuelve dudas y post-venta 24/7',icon:'support',color:'#FB923C',
+     tools:['WhatsApp','Email','Base de conocimiento'], itemWord:'casos',
+     items:[
+      {id:'sop-lucia',name:'Lucía Fernández',sub:'“¿Cómo cambio mi plan?”',status:'activo',value:'Cliente activa',channel:'WhatsApp',score:'Resolviendo',last:'hace 2 min',
+        doing:true,doingText:'Buscando la respuesta en la base de conocimiento',next:'Confirmar que quedó resuelto',
+        fields:[['Canal','WhatsApp'],['Tipo','Consulta'],['Prioridad','Normal'],['Estado','Resolviendo']],
+        acts:[['hace 2 min','Mensaje recibido'],['hace 2 min','Intención: cambio de plan'],['hace 1 min','Buscando en la base de conocimiento']],
+        chat:[['cliente','Hola, ¿cómo cambio mi plan al más grande?','14:02'],['agent','¡Hola Lucía! Con gusto. Puedes hacerlo en Ajustes → Plan, o lo hago por ti ahora mismo. ¿Lo hago?','14:02'],['cliente','Sí, hazlo tú porfa','14:03'],['agent','Hecho ✅ Ya quedaste en el plan superior. ¿Te ayudo con algo más?','14:03']]},
+      {id:'sop-roberto',name:'Roberto Díaz',sub:'Problema resuelto',status:'ganado',value:'Resuelto',channel:'Email',score:'Satisfecho',last:'hace 40 min',
+        doing:false,doingText:'Caso cerrado',next:'Pedir reseña (vía Reputación)',
+        fields:[['Canal','Email'],['Tipo','Incidencia'],['Tiempo','18 min'],['Estado','Resuelto']],
+        acts:[['hace 1 h','Reportó un problema'],['hace 50 min','Solución enviada'],['hace 40 min','Confirmó que quedó resuelto']],
+        chat:[['cliente','No me llegó el acceso después de pagar.','13:10'],['agent','Lamento la demora, Roberto. Ya reenvié tu acceso y verifiqué tu pago. Revísalo y me confirmas 🙏','13:12'],['cliente','Ya llegó, ¡gracias!','13:28']]},
+      {id:'sop-ticket',name:'Ticket #482',sub:'Escalado a un humano',status:'pend',value:'Escalado',channel:'WhatsApp',score:'Requiere humano',last:'hace 15 min',
+        doing:false,doingText:'En espera de un agente humano',next:'Asignar a soporte humano',
+        fields:[['Tipo','Reembolso'],['Prioridad','Alta'],['Motivo','Fuera de política'],['Estado','Escalado']],
+        acts:[['hace 15 min','Solicitud de reembolso recibida'],['hace 15 min','Detectado caso sensible'],['hace 15 min','Escalado a humano con el resumen']],
+        chat:[['cliente','Quiero un reembolso completo.','13:50'],['agent','Entiendo, Roberto. Lo reviso con el equipo para darte la mejor solución; te responden en breve.','13:50'],['sistema','Escalado a soporte humano con todo el contexto','']]}
+     ]},
+    {id:'legal',nm:'Agente Legal / Documentos',rl:'Contratos y documentos (con revisión humana)',icon:'legal',color:'#2DD4BF',
+     tools:['Plantillas','Firma digital','Alertas'], itemWord:'documentos',
+     items:[
+      {id:'leg-contrato',name:'Contrato de servicio — Cliente nuevo',sub:'Generado · pendiente de revisión',status:'pend',value:'Borrador',channel:'Plantillas',score:'Revisión',last:'hace 20 min',
+        doing:false,doingText:'Esperando tu revisión antes de enviar',next:'Revisar y enviar a firma',
+        fields:[['Tipo','Contrato de servicio'],['Base','Plantilla aprobada'],['Revisión','Humana requerida'],['Estado','Borrador']],
+        acts:[['hace 20 min','Datos del cliente tomados del CRM'],['hace 20 min','Contrato armado desde la plantilla']],
+        process:[['Datos del cliente','done'],['Borrador generado','done'],['Revisión humana','pend'],['Enviar a firma','pend']],
+        output:{title:'Borrador listo',body:'Armé el contrato desde tu plantilla aprobada con los datos del cliente.<br>⚠️ <b>Siempre lo revisa una persona (o tu abogado) antes de enviarlo.</b> El agente prepara documentos, no da asesoría legal.'}},
+      {id:'leg-vence',name:'Vencimientos próximos',sub:'2 contratos vencen este mes',status:'activo',value:'2 por vencer',channel:'Alertas',score:'Alerta',last:'hace 1 h',
+        doing:true,doingText:'Preparando recordatorios de renovación',next:'Avisar 15 días antes',
+        fields:[['Por vencer','2'],['Más próximo','en 9 días'],['Estado','En seguimiento']],
+        acts:[['hace 1 h','Revisó las fechas de todos los contratos'],['hace 1 h','Detectó 2 por vencer este mes']],
+        process:[['Fechas revisadas','done'],['Vencimientos detectados','done'],['Recordatorios','doing'],['Confirmar renovación','pend']],
+        output:{title:'Vencimientos',body:'2 contratos vencen este mes (el más próximo en 9 días). Preparé recordatorios de renovación para que no se te pase ninguno.'}},
+      {id:'leg-firma',name:'Documento enviado a firma',sub:'Esperando firma del cliente',status:'activo',value:'En firma',channel:'Firma digital',score:'En firma',last:'hace 3 h',
+        doing:false,doingText:'Esperando que el cliente firme',next:'Recordar si no firma en 48 h',
+        fields:[['Documento','Contrato de servicio'],['Enviado a','Cliente'],['Estado','En firma']],
+        acts:[['hace 3 h','Documento aprobado por ti'],['hace 3 h','Enviado a firma digital']],
+        process:[['Aprobado por ti','done'],['Enviado a firma','done'],['Firma del cliente','doing'],['Archivar firmado','pend']],
+        output:{title:'En firma',body:'El documento (ya aprobado por ti) se envió a firma digital. En cuanto el cliente firme, se archiva solo.'}}
+     ]}
+  ];
+  var AMAP={}; AGENTS.forEach(function(a){AMAP[a.id]=a; a.doneToday=Math.floor(6+Math.random()*10);});
+
+  // ---------- KPIs ----------
+  var KPIS=[
+    {id:'leads',label:'Leads atendidos',val:47,unit:'',go:'agent:leads'},
+    {id:'citas',label:'Citas agendadas',val:12,unit:'',go:'agent:citas'},
+    {id:'resp',label:'Respuesta prom.',val:41,unit:'s',go:'view:roi'},
+    {id:'horas',label:'Horas ahorradas',val:6.5,unit:'h',dec:1,go:'view:roi'},
+    {id:'revive',label:'Clientes reactivados',val:9,unit:'',go:'agent:segui'},
+    {id:'pipe',label:'En seguimiento',val:28400,unit:'',money:true,go:'view:roi'}
+  ];
+  var KMAP={}; KPIS.forEach(function(k){KMAP[k.id]=k;});
+
+  var state={view:'overview', agentId:null, itemId:null};
+  AGENTS.forEach(function(a){a._rt={status:'idle',prog:0,raf:null};});
+  var feedCountN=128, brainN=1842;
+
+  // ================= OVERVIEW: KPIs =================
+  var kpiWrap=$('kpis');
+  KPIS.forEach(function(k){
+    var el=document.createElement('div'); el.className='kpi'+(k.go?' clickable':'');
+    el.innerHTML='<div class="label">'+k.label+(k.go?'<span class="kgo">ver →</span>':'')+'</div><div class="val" id="kpi-'+k.id+'">'+fmt(k)+'</div>'+
+      '<div class="spark"><svg viewBox="0 0 100 20" preserveAspectRatio="none" id="spark-'+k.id+'"></svg></div>';
+    if(k.go){ el.onclick=function(){ routeGo(k.go); }; }
+    kpiWrap.appendChild(el);
+    k.hist=[]; for(var i=0;i<16;i++)k.hist.push(.4+Math.random()*.5); drawSpark(k);
+  });
+  function routeGo(go){ var p=go.split(':');
+    if(p[0]==='agent')showAgent(p[1]);
+    else if(p[0]==='view'){ if(p[1]==='roi')showRoi(); else if(p[1]==='brain')showBrain(); else if(p[1]==='connect')showConnect(); else showOverview(); }
+  }
+  function fmt(k){var v=k.val; if(k.money)return '$'+Math.round(v).toLocaleString('en-US');
+    if(k.dec)return v.toFixed(k.dec)+'<span class="unit">'+k.unit+'</span>';
+    return Math.round(v)+(k.unit?'<span class="unit">'+k.unit+'</span>':'');}
+  function bumpKpi(id,amt){var k=KMAP[id]; if(!k)return; k.val+=amt; if(k.id==='resp')k.val=35+Math.random()*12;
+    var el=$('kpi-'+k.id); el.innerHTML=fmt(k); el.classList.add('flash'); setTimeout(function(){el.classList.remove('flash');},600);
+    k.hist.push(.5+Math.random()*.5); if(k.hist.length>16)k.hist.shift(); drawSpark(k);}
+  function drawSpark(k){var svg=$('spark-'+k.id); if(!svg)return; var n=k.hist.length,w=100,h=20,pts=[];
+    for(var i=0;i<n;i++)pts.push([(i/(n-1))*w,h-(k.hist[i]*(h-3))-1]);
+    var d='M'+pts.map(function(p){return p[0].toFixed(1)+' '+p[1].toFixed(1);}).join(' L');
+    svg.innerHTML='<path d="'+d+' L'+w+' '+h+' L0 '+h+' Z" fill="rgba(56,189,248,.12)"/>'+
+      '<path d="'+d+'" fill="none" stroke="#38BDF8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>'+
+      '<circle cx="'+pts[n-1][0].toFixed(1)+'" cy="'+pts[n-1][1].toFixed(1)+'" r="2" fill="#7DD3FC"/>';}
+
+  // ================= OVERVIEW: agents =================
+  var agWrap=$('agents');
+  AGENTS.forEach(function(a){
+    var el=document.createElement('div'); el.className='agent'; el.id='ag-'+a.id;
+    el.innerHTML=
+      '<div class="agent-top"><div class="ava" style="color:'+a.color+'">'+ICON[a.icon]+'</div>'+
+        '<div class="agent-id"><div class="nm">'+a.nm+'</div><div class="rl">'+a.rl+'</div></div>'+
+        '<div class="status idle" id="st-'+a.id+'"><span class="sd"></span>LIBRE</div></div>'+
+      '<div class="task" id="tk-'+a.id+'"><span class="muted">En espera de tareas…</span></div>'+
+      '<div class="bar"><i id="bar-'+a.id+'"></i></div>'+
+      '<div class="tools">'+a.tools.map(function(t){return '<span class="tool">'+t+'</span>';}).join('')+'</div>'+
+      '<div class="agent-foot"><span>'+a.items.length+' '+a.itemWord+' · <b id="dn-'+a.id+'">'+a.doneToday+'</b> tareas hoy</span><span class="seeall">Ver detalle →</span></div>';
+    el.onclick=function(){ showAgent(a.id); };
+    agWrap.appendChild(el);
+  });
+  function setStatus(a,busy){var st=$('st-'+a.id),card=$('ag-'+a.id); if(!st)return;
+    if(busy){st.className='status busy'; st.innerHTML='<span class="sd"></span>TRABAJANDO'; if(card)card.classList.add('working');}
+    else{st.className='status idle'; st.innerHTML='<span class="sd"></span>LIBRE'; if(card)card.classList.remove('working');}
+    updateCount();}
+  function updateCount(){var n=AGENTS.filter(function(a){return a._rt.status==='working';}).length; $('agentCount').textContent=n+' trabajando';}
+
+  // ================= Feed =================
+  var feed=$('feed');
+  function log(agent,text,type){type=type||'info';
+    var d=new Date(),ts=pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());
+    var tag=type==='done'?'✓ COMPLETADO':(type==='warn'?'⚡ EN CURSO':'› INICIADO');
+    var ev=document.createElement('div'); ev.className='ev '+type+' enter';
+    ev.innerHTML='<span class="evdot" style="background:'+(agent?agent.color:'#38BDF8')+'"></span>'+
+      '<div class="evbody"><div class="evtxt">'+text+'</div><div class="evmeta"><span class="evtag">'+tag+'</span> · '+(agent?agent.nm:'Sistema')+' · '+ts+'</div></div>';
+    feed.insertBefore(ev,feed.firstChild); setTimeout(function(){ev.classList.remove('enter');},500);
+    while(feed.children.length>40)feed.removeChild(feed.lastChild);
+    feedCountN++; $('feedCount').textContent=feedCountN+' eventos hoy';
+    brainN++; $('brainNotes').textContent=brainN.toLocaleString('en-US');
+  }
+
+  function runTask(a,taskHtml,doneHtml,dur,onDone){var s=a._rt; if(s.raf)clearInterval(s.raf);
+    s.status='working'; s.prog=0; setStatus(a,true);
+    var tk=$('tk-'+a.id); if(tk)tk.innerHTML=taskHtml;
+    var bar=$('bar-'+a.id); log(a,taskHtml,'warn'); var start=Date.now();
+    s.raf=setInterval(function(){var p=Math.min(1,(Date.now()-start)/dur); s.prog=p; if(bar)bar.style.width=(p*100).toFixed(0)+'%';
+      if(p>=1){clearInterval(s.raf); s.raf=null; s.status='idle'; setStatus(a,false); if(bar)bar.style.width='0%';
+        if(tk)tk.innerHTML='<span class="muted">En espera de tareas…</span>';
+        a.doneToday++; var dn=$('dn-'+a.id); if(dn)dn.textContent=a.doneToday; log(a,doneHtml,'done'); if(onDone)onDone();}
+    },120);
+    if(reduce&&bar)bar.style.width='100%';
+  }
+  function randomAmbient(){var idle=AGENTS.filter(function(a){return a._rt.status==='idle';}); if(!idle.length)return;
+    var a=idle[Math.floor(Math.random()*idle.length)];
+    var it=a.items[Math.floor(Math.random()*a.items.length)];
+    runTask(a,'Procesando: <b>'+esc(it.name)+'</b>','Actualizado: <b>'+esc(it.name)+'</b>',3200+Math.random()*3500,function(){
+      var map={leads:'leads',citas:'citas',segui:'revive',report:'horas',conten:'horas',resena:'leads'};
+      bumpKpi(map[a.id]||'leads',a.id==='report'||a.id==='conten'?.5:1);
+      if(Math.random()<.5)bumpKpi('pipe',150+Math.random()*700); bumpKpi('resp',0);
+    });
+  }
+
+  // ================= Presets =================
+  var PRESETS=[
+    {label:'Responder nuevos leads',run:function(){scenario('Contactando a todos los leads de hoy…',[['leads',3200,'leads',4],['citas',3600,'citas',2],['segui',3000,'revive',1]]);}},
+    {label:'Agendar citas pendientes',run:function(){scenario('Revisando solicitudes de cita…',[['citas',3400,'citas',4],['resena',2800,'leads',2]]);}},
+    {label:'Reactivar clientes fríos',run:function(){scenario('Buscando clientes inactivos…',[['segui',3800,'revive',4]]); setTimeout(function(){bumpKpi('pipe',3200);},1500);}},
+    {label:'Resumen del día',run:function(){scenario('Generando informe de operaciones…',[['report',3600,'horas',1]]); setTimeout(function(){toast('📊 Resumen enviado a tu WhatsApp');},3800);}},
+    {label:'Crear contenido',run:function(){scenario('Produciendo contenido…',[['conten',4200,'horas',1],['resena',2600,'leads',1]]);}}
+  ];
+  var presetWrap=$('presets');
+  PRESETS.forEach(function(p){var b=document.createElement('button'); b.className='preset';
+    b.innerHTML='<span class="pg"></span>'+p.label; b.onclick=function(){p.run(); flashBusy();}; presetWrap.appendChild(b);});
+  function scenario(msg,steps){toast('⚡ '+msg);
+    steps.forEach(function(s,i){setTimeout(function(){var a=AMAP[s[0]]; if(!a)return;
+      var it=a.items[Math.floor(Math.random()*a.items.length)];
+      runTask(a,'Procesando: <b>'+esc(it.name)+'</b>','Listo: <b>'+esc(it.name)+'</b>',s[1],function(){if(s[2])bumpKpi(s[2],s[3]||1); bumpKpi('resp',0);});
+    },i*650);});}
+  function flashBusy(){var btns=presetWrap.querySelectorAll('.preset'); btns.forEach(function(b){b.disabled=true;}); setTimeout(function(){btns.forEach(function(b){b.disabled=false;});},1600);}
+
+  // Custom command
+  var input=$('cmdInput'),send=$('sendBtn');
+  function execCustom(){var v=input.value.trim(); if(!v)return; input.value='';
+    toast('⚡ Orden recibida: "'+(v.length>46?v.slice(0,46)+'…':v)+'"');
+    var low=v.toLowerCase(),picks=[];
+    if(/lead|client|contact|respond|whats|mensaj/.test(low))picks.push('leads');
+    if(/cita|agend|calendar|reserv/.test(low))picks.push('citas');
+    if(/frío|frio|reactiv|segu|recuper|perdid/.test(low))picks.push('segui');
+    if(/report|resum|venta|inform|analiz/.test(low))picks.push('report');
+    if(/post|reel|conten|video|canva|anuncio/.test(low))picks.push('conten');
+    if(/reseñ|resen|review|opin|estrella/.test(low))picks.push('resena');
+    if(!picks.length)picks=['leads','report']; picks=picks.slice(0,3);
+    picks.forEach(function(id,i){setTimeout(function(){var a=AMAP[id];
+      runTask(a,'Ejecutando: <b>'+esc(v.length>40?v.slice(0,40)+'…':v)+'</b>','Tarea completada por '+a.nm,3400+Math.random()*2000,function(){
+        var map={leads:'leads',citas:'citas',segui:'revive',report:'horas',conten:'horas',resena:'leads'}; bumpKpi(map[id]||'leads',1); bumpKpi('resp',0);});
+    },i*600);});}
+  send.onclick=execCustom; input.addEventListener('keydown',function(e){if(e.key==='Enter')execCustom();});
+
+  // ================= ROUTER =================
+  function setCrumbs(parts){ // parts: [{t,go}] last is current
+    var c=$('crumbs');
+    if(state.view==='overview'){ c.hidden=true; return; }
+    c.hidden=false;
+    var html='<span class="back" id="backBtn">'+ICON.chev.replace('M9 6l6 6-6 6','M15 6l-6 6 6 6')+' Atrás</span>';
+    parts.forEach(function(p,i){
+      html+='<span class="sep">/</span>';
+      if(i===parts.length-1) html+='<span class="cur">'+esc(p.t)+'</span>';
+      else html+='<a data-go="'+p.go+'">'+esc(p.t)+'</a>';
+    });
+    c.innerHTML=html;
+    $('backBtn').onclick=function(){ history.back ? goBack() : goBack(); };
+    c.querySelectorAll('a[data-go]').forEach(function(a){a.onclick=function(){var g=a.getAttribute('data-go');
+      if(g==='overview')showOverview(); else showAgent(g);};});
+  }
+  function goBack(){ if(state.view==='item')showAgent(state.agentId); else showOverview(); }
+  function show(view){
+    $('viewOverview').hidden=(view!=='overview');
+    $('viewAgent').hidden=(view!=='agent');
+    $('viewItem').hidden=(view!=='item');
+    $('viewConnect').hidden=(view!=='connect');
+    $('viewBrain').hidden=(view!=='brain');
+    $('viewRoi').hidden=(view!=='roi');
+    if(view!=='brain' && brainGlobe){ try{brainGlobe.destroy();}catch(e){} brainGlobe=null; }
+    animateView({overview:'viewOverview',agent:'viewAgent',item:'viewItem',connect:'viewConnect',brain:'viewBrain',roi:'viewRoi'}[view]);
+    window.scrollTo({top:0,behavior:reduce?'auto':'smooth'});
+  }
+  function animateView(id){ if(reduce||!id)return; var el=$(id); if(!el)return; el.classList.remove('viewanim'); void el.offsetWidth; el.classList.add('viewanim'); }
+  function showOverview(){state.view='overview'; state.agentId=null; state.itemId=null; setCrumbs([]); show('overview');}
+
+  // ================= AGENT VIEW =================
+  function showAgent(id){var a=AMAP[id]; if(!a)return; state.view='agent'; state.agentId=id; state.itemId=null;
+    setCrumbs([{t:'Panel',go:'overview'},{t:a.nm}]);
+    var working=a.items.filter(function(it){return it.doing;}).length;
+    var html=
+      '<div class="ahead"><div class="ava lg" style="color:'+a.color+'">'+ICON[a.icon]+'</div>'+
+        '<div class="ai-txt"><h2>'+esc(a.nm)+'</h2><div class="rl">'+esc(a.rl)+'</div>'+
+        '<div class="tools ai-tools">'+a.tools.map(function(t){return '<span class="tool">'+t+'</span>';}).join('')+'</div></div>'+
+        '<div class="right"><div class="status '+(working?'busy':'idle')+'"><span class="sd"></span>'+(working?'TRABAJANDO':'ACTIVO')+'</div></div></div>'+
+      '<div class="statrow">'+
+        stat('Tareas hoy',a.doneToday)+stat(a.itemWord.charAt(0).toUpperCase()+a.itemWord.slice(1),a.items.length)+
+        stat('Trabajando ahora',working)+stat('Tiempo prom.',(30+Math.floor(Math.random()*25))+'s')+'</div>'+
+      '<div class="detail-grid">'+
+        '<div class="panel"><div class="panel-head"><h2>'+a.itemWord.charAt(0).toUpperCase()+a.itemWord.slice(1)+' y tareas</h2><span class="count">clic para ver detalle</span></div><div class="list" id="itemList"></div></div>'+
+        '<div class="panel"><div class="panel-head"><h2>Actividad del agente</h2></div><div class="side-log" id="sideLog"></div></div>'+
+      '</div>';
+    $('viewAgent').innerHTML=html; show('agent');
+    // item rows
+    var list=$('itemList');
+    a.items.forEach(function(it){
+      var row=document.createElement('div'); row.className='row';
+      row.innerHTML='<div class="rava" style="background:'+a.color+'">'+initials(it.name)+'</div>'+
+        '<div class="rinfo"><div class="rn">'+esc(it.name)+'</div><div class="rs">'+it.sub+'</div>'+
+          (it.doing?'<div class="doinghint"><span class="pls"></span>'+esc(it.doingText)+'</div>':'')+'</div>'+
+        '<div class="rmeta">'+badge(it.status)+(it.value&&it.value!=='—'?'<span style="font-family:var(--mono);font-size:11px;color:var(--muted)">'+esc(it.value)+'</span>':'')+'</div>'+
+        '<span class="chev">'+ICON.chev+'</span>';
+      row.onclick=function(){showItem(a.id,it.id);};
+      list.appendChild(row);
+    });
+    // side log
+    var sl=$('sideLog');
+    var acts=[]; a.items.forEach(function(it){it.acts.forEach(function(ac){acts.push({t:ac[0],text:ac[1],c:a.color});});});
+    acts.slice(0,9).forEach(function(ac){var e=document.createElement('div'); e.className='ev';
+      e.innerHTML='<span class="evdot" style="background:'+ac.c+'"></span><div class="evbody"><div class="evtxt">'+ac.text+'</div><div class="evmeta">'+ac.t+'</div></div>';
+      sl.appendChild(e);});
+  }
+  function stat(k,v){return '<div class="stat"><div class="k">'+k+'</div><div class="v">'+v+'</div></div>';}
+
+  // ================= ITEM VIEW =================
+  function showItem(agentId,itemId){var a=AMAP[agentId]; if(!a)return;
+    var it=a.items.filter(function(x){return x.id===itemId;})[0]; if(!it)return;
+    state.view='item'; state.agentId=agentId; state.itemId=itemId;
+    setCrumbs([{t:'Panel',go:'overview'},{t:a.nm,go:agentId},{t:it.name}]);
+    var isProd=!!(it.process||it.output);
+    var mainTitle=isProd?'Proceso y entregable':'Conversación y actividad';
+    var mainBody;
+    if(isProd){
+      var src=it.source?'<div class="srcbox"><span class="srcico">'+(it.source.mode==='subido'?'🎬':it.source.mode==='clip'?'✂️':'✨')+'</span><div><div class="srck">Entrada</div><div class="srcv">'+esc(it.source.text)+'</div></div></div>':'';
+      var steps=(it.process||[]).map(function(s){var cl=s[1],col=cl==='done'?'var(--ok)':cl==='doing'?'var(--work)':'var(--faint)',ic=cl==='done'?'✓':cl==='doing'?'◐':'○';
+        return '<div class="pstep"><span class="pico" style="color:'+col+'">'+ic+'</span><span'+(cl==='pend'?' class="pend"':'')+'>'+esc(s[0])+'</span>'+(cl==='doing'?'<span class="pnow">en curso</span>':'')+'</div>';}).join('');
+      var del=it.output?'<div class="deliver"><div class="dvh">'+esc(it.output.title)+'</div><div class="dvbody">'+it.output.body+'</div></div>':'';
+      var pub=it.publishTo?'<div class="pubrow"><div class="pubinfo"><div class="pubk">Destino</div><div class="pubv">📸 '+esc(it.publishTo)+'</div></div><button class="pubbtn" id="pubBtn">✓ Aprobar y publicar</button></div>':'';
+      mainBody='<div class="prodwrap">'+src+(steps?'<div class="pstitle">Proceso de creación</div>'+steps:'')+del+pub+'</div>';
+    } else {
+      mainBody='<div class="chat">'+it.chat.map(function(m){
+        if(m[0]==='sistema')return '<div class="sysmsg">'+m[1]+'</div>';
+        var who=m[0]==='agent'?('🤖 '+a.nm):'👤 Cliente';
+        return '<div class="msg '+m[0]+'"><span class="who">'+who+'</span><div class="bub">'+m[1]+'</div>'+(m[2]?'<span class="tm">'+m[2]+'</span>':'')+'</div>';
+      }).join('')+'</div>';
+    }
+    var fields=it.fields.map(function(f){return '<div class="kv"><span class="k">'+esc(f[0])+'</span><span class="v">'+esc(f[1])+'</span></div>';}).join('');
+    var acts=it.acts.map(function(ac){return '<div class="a"><span class="ad"></span><div><div>'+ac[1]+'</div><div class="at">'+ac[0]+'</div></div></div>';}).join('');
+    var html=
+      '<div class="ihead"><div class="iava" style="background:'+a.color+'">'+initials(it.name)+'</div>'+
+        '<div><h2>'+esc(it.name)+'</h2><div class="isub"><span>Atendido por <b>'+esc(a.nm)+'</b></span><span>Canal: <b>'+esc(it.channel)+'</b></span><span>Última actividad: <b>'+esc(it.last)+'</b></span></div></div>'+
+        '<div class="right">'+badge(it.status)+'</div></div>'+
+      '<div class="doing '+(it.doing?'':'calm')+'"><div class="dicon">'+(it.doing?ICON.bolt:ICON.check)+'</div>'+
+        '<div><div class="dt">'+(it.doing?'El agente está haciendo ahora':'Estado actual')+'</div><div class="dv">'+esc(it.doingText)+'</div>'+
+        '<div class="dn">Próxima acción: '+esc(it.next)+'</div></div></div>'+
+      '<div class="idetail">'+
+        '<div class="panel"><div class="panel-head"><h2>'+mainTitle+'</h2></div>'+mainBody+'</div>'+
+        '<div><div class="panel infocard"><h4>Datos</h4>'+fields+'</div>'+
+          '<div class="panel infocard"><h4>Acciones del agente</h4><div class="actlog">'+acts+'</div>'+
+          '<button class="nextbtn" id="nextBtn">Ejecutar siguiente acción</button></div></div>'+
+      '</div>';
+    $('viewItem').innerHTML=html; show('item');
+    $('nextBtn').onclick=function(){toast('⚡ '+a.nm+': '+it.next); this.textContent='Acción en curso…'; this.disabled=true;
+      var self=this; setTimeout(function(){self.textContent='✓ Acción ejecutada'; self.style.background='var(--ok)';},1400);};
+    var pb=$('pubBtn'); if(pb){ pb.onclick=function(){var acc=it.publishTo; pb.disabled=true; pb.innerHTML='<span class="spin"></span> Publicando…';
+      setTimeout(function(){pb.innerHTML='✓ Publicado en '+acc; pb.classList.add('done'); toast('📤 Publicado en '+acc);}, reduce?150:1600);};}
+  }
+
+  // ================= CONECTAR MIS DATOS =================
+  var SOURCES=[
+    {id:'wa', emoji:'💬', short:'WhatsApp', title:'Tu WhatsApp', desc:'Mismo número de siempre. El agente lee y responde a tus clientes 24/7.', via:'WhatsApp Business API', feeds:'Leads y Atención', btn:'Conectar WhatsApp', clients:312, records:1248, names:['Carlos Méndez','Ana Gómez','Daniela Ríos']},
+    {id:'crm', emoji:'🗂️', short:'CRM', title:'Tu CRM actual', desc:'HubSpot, Zoho, Salesforce y más. Se sincroniza solo por su conexión.', via:'Conexión API', feeds:'Leads y Ventas', btn:'Conectar CRM', clients:540, records:540, names:['Pedro Luna','Jorge Torres']},
+    {id:'xls', emoji:'📊', short:'Excel / Sheets', title:'Tu Excel / Google Sheets', desc:'Importamos tus clientes una sola vez y se mantiene al día.', via:'Importación de archivo', feeds:'Leads', btn:'Importar Excel', clients:286, records:286, names:['María Paredes','Luis Ramos','Sofía Cano']},
+    {id:'pagos', emoji:'💳', short:'Pagos / banco', title:'Pasarela de pagos / banco', desc:'Stripe, PayPal, Mercado Pago o tu banco. El agente lee ingresos y egresos solo.', via:'Conexión de pagos (Stripe/Belvo)', feeds:'Finanzas', btn:'Conectar pagos', clients:0, records:420, names:['Pago recibido $120','Pago recibido $350','Factura #1042']},
+    {id:'faq', emoji:'📚', short:'Base de conocimiento', title:'Base de conocimiento', desc:'Tus preguntas frecuentes, políticas y precios. Con esto responde Atención al cliente.', via:'Documentos / sitio web', feeds:'Atención al cliente', btn:'Cargar información', clients:0, records:85, names:['FAQ: horarios','FAQ: precios','FAQ: devoluciones']},
+    {id:'plantillas', emoji:'📄', short:'Plantillas', title:'Tus plantillas de contrato', desc:'Subes tus plantillas aprobadas una vez. El agente las llena y las envía a firma.', via:'Archivos + firma digital', feeds:'Legal / Documentos', btn:'Subir plantillas', clients:0, records:12, names:['Plantilla: Servicio','Plantilla: NDA']}
+  ];
+  var cxConnected={}, cxClients=0, cxRecords=0;
+  function cxTween(id,to,money){var el=$(id); if(!el)return; var from=parseInt(el.getAttribute('data-v')||'0',10);
+    if(reduce){el.textContent=money?'$'+to.toLocaleString('en-US'):to.toLocaleString('en-US'); el.setAttribute('data-v',to); return;}
+    var start=Date.now(),dur=900;(function step(){var p=Math.min(1,(Date.now()-start)/dur);var v=Math.round(from+(to-from)*p);
+      el.textContent=money?'$'+v.toLocaleString('en-US'):v.toLocaleString('en-US'); if(p<1)requestAnimationFrame(step); else el.setAttribute('data-v',to);})();}
+
+  function showConnect(){
+    state.view='connect'; state.agentId=null; state.itemId=null;
+    setCrumbs([{t:'Panel',go:'overview'},{t:'Conectar mis datos'}]);
+    var cards=SOURCES.map(function(s){var done=cxConnected[s.id];
+      return '<div class="cx-card'+(done?' connected':'')+'" id="cxc-'+s.id+'">'+
+        '<div class="cxi">'+s.emoji+'</div><h3>'+s.title+'</h3>'+
+        '<div class="cd">'+s.desc+'</div>'+
+        '<div class="cxfeeds">Alimenta: <b>'+s.feeds+'</b></div>'+
+        '<div class="via">Se conecta con: '+s.via+'</div>'+
+        '<button class="cxbtn'+(done?' ok':'')+'" id="cxb-'+s.id+'"'+(done?' disabled':'')+'>'+(done?'✓ Conectado':s.btn)+'</button></div>';
+    }).join('');
+    var reassure=[
+      ['No cambias de número','Sigues con tu mismo WhatsApp de siempre; el agente queda adentro.'],
+      ['Migración una sola vez','Tu historial se importa y listo. De ahí en adelante, todo automático.'],
+      ['Tú ves y controlas todo','Cada conversación queda visible, tal como en este panel.'],
+      ['Tus datos son tuyos','Se quedan en tu base de datos, privados y seguros.']
+    ].map(function(r){return '<div class="cx-re"><div class="rh">✓ '+r[0]+'</div><div class="rt">'+r[1]+'</div></div>';}).join('');
+    $('viewConnect').innerHTML=
+      '<div class="cx-hero"><h2>Conecta tus datos — sin empezar de cero</h2>'+
+        '<p>Tu información se queda donde ya la tienes. Conectamos el sistema a tu WhatsApp y a tu CRM o Excel, y los agentes empiezan a trabajar con tus clientes reales. Dale clic a una fuente y mira cómo entran los datos.</p></div>'+
+      '<div class="cx-flow">'+
+        '<div class="cx-stage"><div class="lbl">Tus fuentes</div>'+
+          SOURCES.map(function(s){return '<div class="cx-node" id="cxn-'+s.id+'"><div class="nt">'+s.emoji+' '+s.short+'</div><div class="ns" id="cxs-'+s.id+'">Sin conectar</div></div>';}).join('')+
+        '</div>'+
+        '<div class="cx-arrow" id="cxa1"><span class="fd"></span></div>'+
+        '<div class="cx-stage" style="flex:0 0 170px"><div class="lbl">Procesa</div>'+
+          '<div class="cx-brain"><div class="bt">El Cerebro</div><div class="bs">Memoria + IA<br>reparte el trabajo</div></div></div>'+
+        '<div class="cx-arrow" id="cxa2"><span class="fd"></span></div>'+
+        '<div class="cx-stage"><div class="lbl">Tus departamentos trabajan</div>'+
+          '<div class="cx-node cx-result"><div class="rv" id="cxClients" data-v="0">0</div><div class="rk">clientes importados</div></div>'+
+          '<div class="cx-node cx-result"><div class="rv" id="cxRecords" data-v="0">0</div><div class="rk">registros procesados</div></div>'+
+          '<div class="cx-node cx-result"><div class="rv" id="cxAgents" data-v="0">0</div><div class="rk">departamentos activos</div></div>'+
+        '</div></div>'+
+      '<div class="cx-preview" id="cxPreview"></div>'+
+      '<div class="cx-cards">'+cards+'</div>'+
+      '<div class="cx-reassure">'+reassure+'</div>'+
+      '<div class="cx-go"><button id="cxGo">Ver mis agentes trabajando →</button></div>';
+    show('connect');
+    // restaurar estado si ya había conexiones
+    SOURCES.forEach(function(s){
+      $('cxb-'+s.id).onclick=function(){connectSrc(s);};
+      if(cxConnected[s.id]){ markSource(s); }
+    });
+    if(cxRecords>0){ $('cxa1').classList.add('active'); $('cxa2').classList.add('active');
+      cxTween('cxClients',cxClients); cxTween('cxRecords',cxRecords); cxTween('cxAgents',9);
+      var prev=$('cxPreview'); SOURCES.forEach(function(s){ if(cxConnected[s.id]) s.names.forEach(function(n){prev.appendChild(chip(n));}); }); }
+    $('cxGo').onclick=function(){ toast('🚀 Agentes trabajando con tus datos'); showOverview(); };
+  }
+  function chip(n){var c=document.createElement('span'); c.className='cx-chip'; c.innerHTML='<span class="d"></span>'+esc(n); return c;}
+  function markSource(s){ var sn=$('cxs-'+s.id); if(sn){sn.textContent='✓ Conectado'; sn.style.color='var(--ok)';}
+    var node=$('cxn-'+s.id); if(node)node.classList.add('on'); }
+  function connectSrc(s){
+    if(cxConnected[s.id])return;
+    var btn=$('cxb-'+s.id); btn.disabled=true; btn.innerHTML='<span class="spin"></span> Conectando…';
+    setTimeout(function(){
+      cxConnected[s.id]=true; cxClients+=s.clients; cxRecords+=s.records;
+      btn.innerHTML='✓ Conectado'; btn.classList.add('ok');
+      var card=$('cxc-'+s.id); if(card)card.classList.add('connected');
+      markSource(s);
+      $('cxa1').classList.add('active'); $('cxa2').classList.add('active');
+      cxTween('cxClients',cxClients); cxTween('cxRecords',cxRecords); cxTween('cxAgents',9);
+      var prev=$('cxPreview'); s.names.forEach(function(n){prev.appendChild(chip(n));});
+      toast('✓ '+s.title+' conectado — datos importados');
+    }, reduce?150:1600);
+  }
+  $('connectBtn').onclick=showConnect;
+
+  // ================= RESULTADOS / ROI =================
+  function roiLineChart(){
+    var W=520,H=250,pL=42,pR=16,pT=16,pB=30;
+    var conIA=[84,102,126,141,168], sinIA=[60,60,61,59,62], labs=['S1','S2','S3','S4','S5'], max=180;
+    var ix=function(i){return pL+(i/(labs.length-1))*(W-pL-pR);};
+    var iy=function(v){return pT+(1-v/max)*(H-pT-pB);};
+    var grid='',yl=[0,60,120,180];
+    yl.forEach(function(v){var y=iy(v); grid+='<line x1="'+pL+'" y1="'+y.toFixed(1)+'" x2="'+(W-pR)+'" y2="'+y.toFixed(1)+'" stroke="#232E40" stroke-width="1"/>'+
+      '<text x="'+(pL-8)+'" y="'+(y+4).toFixed(1)+'" text-anchor="end" font-size="11" fill="#8B98AD" font-family="JetBrains Mono,monospace">'+v+'</text>';});
+    var xl=''; labs.forEach(function(w,i){xl+='<text x="'+ix(i).toFixed(1)+'" y="'+(H-10)+'" text-anchor="middle" font-size="11" fill="#8B98AD" font-family="JetBrains Mono,monospace">'+w+'</text>';});
+    function pth(a){return 'M'+a.map(function(v,i){return ix(i).toFixed(1)+' '+iy(v).toFixed(1);}).join(' L');}
+    var pCon=pth(conIA), area=pCon+' L'+ix(4).toFixed(1)+' '+iy(0).toFixed(1)+' L'+ix(0).toFixed(1)+' '+iy(0).toFixed(1)+' Z';
+    var dots=conIA.map(function(v,i){return '<circle cx="'+ix(i).toFixed(1)+'" cy="'+iy(v).toFixed(1)+'" r="3.2" fill="#38BDF8"/>';}).join('');
+    return '<svg viewBox="0 0 '+W+' '+H+'" width="100%" style="height:auto;display:block">'+grid+xl+
+      '<path d="'+area+'" fill="rgba(56,189,248,.12)"/>'+
+      '<path d="'+pth(sinIA)+'" fill="none" stroke="#596579" stroke-width="2" stroke-dasharray="5 5"/>'+
+      '<path d="'+pCon+'" fill="none" stroke="#38BDF8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>'+dots+
+      '<text x="'+ix(4).toFixed(1)+'" y="'+(iy(168)-10).toFixed(1)+'" text-anchor="end" font-size="13" font-weight="700" fill="#38BDF8" font-family="Sora,sans-serif">168</text></svg>';
+  }
+  function roiFunnel(){
+    var steps=[['Nuevos leads',168,'#38BDF8'],['Contactados',161,'#34D399'],['Citas agendadas',54,'#FBBF24'],['Cierres',21,'#A78BFA']];
+    return steps.map(function(s){var pct=Math.round(s[1]/168*100);
+      return '<div class="fn"><div class="fnh"><span>'+s[0]+'</span><b>'+s[1]+'</b></div><div class="fnbar"><i style="width:'+pct+'%;background:'+s[2]+'"></i></div></div>';}).join('');
+  }
+  function showRoi(){
+    state.view='roi'; state.agentId=null; state.itemId=null;
+    setCrumbs([{t:'Panel',go:'overview'},{t:'Resultados'}]);
+    var tiles=[['142 h','Horas ahorradas','≈ 18 días de trabajo',true],['$8,400','Generado + recuperado','ventas asistidas + leads rescatados',true],['37','Leads que no se perdieron','atendidos dentro del SLA',false],['41 s','Respuesta promedio','antes: 4 horas',false]]
+      .map(function(t){return '<div class="roi-tile'+(t[3]?' good':'')+'"><div class="rv">'+t[0]+'</div><div class="rk">'+t[1]+'</div><div class="rs">'+t[2]+'</div></div>';}).join('');
+    var ba=[['Tiempo de respuesta','4 horas','41 segundos'],['Leads sin seguimiento','1 de cada 3','casi 0'],['Reseñas solicitadas','a veces','a cada cliente feliz'],['Reporte del negocio','manual','automático, cada mañana']]
+      .map(function(r){return '<div class="ba"><span class="bak">'+r[0]+'</span><span class="bav"><span class="old">'+r[1]+'</span><span class="arr">→</span><span class="new">'+r[2]+'</span></span></div>';}).join('');
+    var contrib=[['Ventas',38,'#38BDF8'],['Retención',27,'#FBBF24'],['Atención',20,'#FB923C'],['Finanzas',15,'#A3E635']]
+      .map(function(c){return '<div class="cb"><div class="cbh"><span>'+c[0]+'</span><b>'+c[1]+'%</b></div><div class="cbbar"><i style="width:'+c[1]+'%;background:'+c[2]+'"></i></div></div>';}).join('');
+    $('viewRoi').innerHTML=
+      '<div class="roi-hero"><h2>Resultados de tu equipo de IA</h2><span class="pill per">📅 Octubre 2026</span></div>'+
+      '<div class="roi-tiles">'+tiles+'</div>'+
+      '<div class="roi-two">'+
+        '<div class="panel"><div class="panel-head"><h2>Leads atendidos por semana</h2><span class="count">con IA vs ritmo anterior</span></div>'+
+          '<div class="chartwrap">'+roiLineChart()+'<div class="legend"><span><i></i> Con IA</span><span><i class="dash"></i> Ritmo anterior</span></div></div></div>'+
+        '<div class="panel"><div class="panel-head"><h2>Embudo de conversión</h2></div><div class="chartwrap">'+roiFunnel()+'</div></div>'+
+      '</div>'+
+      '<div class="roi-two2">'+
+        '<div class="panel"><div class="panel-head"><h2>Antes vs con IA</h2></div><div class="chartwrap">'+ba+'</div></div>'+
+        '<div class="panel contrib"><div class="panel-head"><h2>Dónde se generó el valor</h2></div><div class="chartwrap">'+contrib+'</div></div>'+
+      '</div>';
+    show('roi');
+  }
+  $('roiBtn').onclick=showRoi;
+
+  // ================= CEREBRO (vista radial) =================
+  var BRAIN_IDS=['leads','citas','finanzas','soporte','report','conten','legal','resena','segui'];
+  var DEPT={
+    leads:{dept:'Ventas',reports:['Nuevo lead de alto interés calificado','Lead respondido en 38 s','Cliente listo para agendar']},
+    citas:{dept:'Agenda',reports:['Cita agendada para hoy 5:00 PM','4 recordatorios enviados','Cliente reprogramó al jueves']},
+    segui:{dept:'Retención',reports:['Cliente frío reactivado','3 leads cerca del límite priorizados','4 clientes recuperados hoy']},
+    report:{dept:'Inteligencia',reports:['Cierre del día: 31% (+12%)','Pipeline en seguimiento: $28,400','Recomendación: priorizar 3 leads sin cita']},
+    conten:{dept:'Marketing',reports:['Reel de la semana listo','3 posts diseñados en Canva','Variantes de anuncio en prueba A/B']},
+    resena:{dept:'Reputación',reports:['Reseña 5★ recibida','2 solicitudes de reseña enviadas','Cliente satisfecho detectado']},
+    finanzas:{dept:'Finanzas',reports:['Balance de hoy: +$2,330','3 facturas por cobrar detectadas','Flujo de caja 30 días: saludable']},
+    soporte:{dept:'Soporte',reports:['Duda resuelta en 22 s','Caso cerrado: cliente satisfecho','Ticket escalado a un humano']},
+    legal:{dept:'Legal',reports:['Contrato generado (pendiente revisión)','2 contratos vencen este mes','Documento enviado a firma']}
+  };
+  var SYNTH=[
+    'Ventas y Agenda están sincronizados: 12 citas confirmadas hoy.',
+    'Retención rescató $3,200 que se iban a perder esta semana.',
+    'Recomendación: 3 leads de alto valor siguen sin cita — priorízalos hoy.',
+    'Marketing dejó 4 piezas listas; Reputación sumó una reseña 5★.',
+    'Mejor canal del día: WhatsApp. Respuesta promedio: 41 s.',
+    'Finanzas reporta +$2,330 hoy; Soporte cerró 2 casos sin que intervengas.',
+    'Legal detectó 2 contratos por vencer — ya preparó los recordatorios.'
+  ];
+  var nodePos={}, bcenter={x:0,y:0}, pulses=[], braf=null, synthI=0, brainGlobe=null;
+
+  function showBrain(){
+    state.view='brain'; state.agentId=null; state.itemId=null;
+    setCrumbs([{t:'Panel',go:'overview'},{t:'Cerebro'}]);
+    var nodes=BRAIN_IDS.map(function(id){var a=AMAP[id],d=DEPT[id];
+      return '<div class="bnode" id="bn-'+id+'"><div class="bnrow"><div class="bnico" style="color:'+a.color+'">'+ICON[a.icon]+'</div>'+
+        '<div style="min-width:0"><div class="bndept">Depto. '+d.dept+'</div><div class="bnname">'+a.nm+'</div></div></div>'+
+        '<div class="bnrep" id="brep-'+id+'">'+d.reports[0]+'</div></div>';
+    }).join('');
+    $('viewBrain').innerHTML=
+      '<div class="bx-hero"><h2>El Cerebro — centro de mando</h2><p>Cada agente es un departamento. Todos reportan en tiempo real al Cerebro, que reúne la información, la recuerda y recomienda el siguiente paso. Haz clic en un departamento para entrar.</p></div>'+
+      '<div class="brainstage" id="brainstage"><svg class="bsvg" id="bsvg"></svg>'+
+        '<div class="bring" style="width:58%;height:58%"></div><div class="bring" style="width:80%;height:80%"></div>'+
+        '<div class="bcenter"><div class="bglobe" id="bglobeWrap"><div class="bfallback" id="bfallback">🧠</div><canvas id="bglobe"></canvas></div><div class="bctitle">EL CEREBRO</div><div class="bccount"><span id="brainMem">'+brainN.toLocaleString('en-US')+'</span> notas</div></div>'+
+        nodes+'</div>'+
+      '<div class="bx-grid"><div class="bx-synth"><div class="sh">Síntesis del Cerebro</div><div class="st" id="bsynthtext" style="transition:opacity .3s">'+SYNTH[0]+'</div></div>'+
+        '<div class="bx-reports"><div class="rhd">Reportes al Cerebro</div><div class="bx-rlist" id="bx-rlist"></div></div></div>';
+    show('brain');
+    BRAIN_IDS.forEach(function(id){var n=$('bn-'+id); if(n)n.onclick=function(){showAgent(id);};});
+    layoutBrain();
+    initBrainGlobe();
+    [['report','Cierre del día: 31% (+12%)'],['leads','Nuevo lead de alto interés calificado'],['citas','Cita agendada para hoy 5:00 PM'],['segui','Cliente frío reactivado']].forEach(function(s){addReport(s[0],s[1],true);});
+    if(!reduce && !braf) braf=requestAnimationFrame(brainLoop);
+  }
+  function initBrainGlobe(){
+    var cv=document.getElementById('bglobe'); if(!cv)return;
+    if(brainGlobe){ try{brainGlobe.destroy();}catch(e){} brainGlobe=null; }
+    if(!window.__createGlobe)return;
+    var size=cv.clientWidth||200, phi=0, pointer=null, curr=0, rOff=0;
+    try{
+      brainGlobe=window.__createGlobe(cv,{
+        devicePixelRatio:2, width:size*2, height:size*2, phi:0, theta:0.26, dark:1,
+        diffuse:1.2, mapSamples:12000, mapBrightness:6,
+        baseColor:[0.38,0.33,0.58], markerColor:[0.72,0.58,1], glowColor:[0.42,0.32,0.72],
+        markers:[{location:[40.71,-74.0],size:0.08},{location:[19.43,-99.13],size:0.09},{location:[-23.55,-46.63],size:0.08},{location:[51.5,-0.12],size:0.07},{location:[48.85,2.35],size:0.06},{location:[28.61,77.2],size:0.09},{location:[35.68,139.69],size:0.07},{location:[-33.86,151.2],size:0.06},{location:[1.35,103.81],size:0.05},{location:[30.04,31.23],size:0.06}],
+        onRender:function(st){ if(!reduce && pointer===null)phi+=0.004; st.phi=phi+rOff; st.width=size*2; st.height=size*2; }
+      });
+      cv.style.opacity='1'; cv.style.cursor='grab';
+      var fb=document.getElementById('bfallback'); if(fb)fb.hidden=true;
+      cv.onpointerdown=function(e){pointer=e.clientX-curr; cv.style.cursor='grabbing';};
+      cv.onpointerup=function(){pointer=null; cv.style.cursor='grab';};
+      cv.onpointerleave=function(){pointer=null; cv.style.cursor='grab';};
+      cv.onpointermove=function(e){ if(pointer!==null){ curr=e.clientX-pointer; rOff=curr/180; } };
+    }catch(e){}
+  }
+  window.addEventListener('cobe-ready',function(){ if(state.view==='brain')initBrainGlobe(); });
+  function layoutBrain(){
+    var stage=$('brainstage'); if(!stage)return;
+    var W=stage.clientWidth, H=stage.clientHeight||W, cx=W/2, cy=H/2, R=Math.min(W,H)*0.37;
+    bcenter={x:cx,y:cy};
+    var svg=$('bsvg'); if(svg)svg.setAttribute('viewBox','0 0 '+W+' '+H);
+    var lines='';
+    BRAIN_IDS.forEach(function(id,i){var ang=(-90+i*(360/BRAIN_IDS.length))*Math.PI/180;
+      var x=cx+R*Math.cos(ang), y=cy+R*Math.sin(ang); nodePos[id]={x:x,y:y};
+      var node=$('bn-'+id); if(node){node.style.left=x+'px'; node.style.top=y+'px';}
+      lines+='<line x1="'+cx+'" y1="'+cy+'" x2="'+x+'" y2="'+y+'" stroke="rgba(167,139,250,.28)" stroke-width="1.5"/>';});
+    if(svg)svg.innerHTML=lines+'<g id="bpulses"></g>';
+  }
+  function addReport(id,text,seed){
+    var a=AMAP[id],d=DEPT[id],list=$('bx-rlist'); if(!a||!list)return;
+    var now=new Date(seed?Date.now()-Math.random()*600000:Date.now());
+    var ts=pad(now.getHours())+':'+pad(now.getMinutes())+':'+pad(now.getSeconds());
+    var el=document.createElement('div'); el.className='brep'+(seed?'':' enter');
+    el.innerHTML='<span class="bd" style="background:'+a.color+'"></span><div class="btx">'+text+'<div class="bm">Depto. '+d.dept+' · '+ts+'</div></div>';
+    list.insertBefore(el,list.firstChild);
+    if(!seed)setTimeout(function(){el.classList.remove('enter');},500);
+    while(list.children.length>30)list.removeChild(list.lastChild);
+    var nr=$('brep-'+id); if(nr)nr.textContent=text;
+  }
+  function onReport(id){
+    brainN++; var m=$('brainMem'); if(m)m.textContent=brainN.toLocaleString('en-US');
+    var bn2=$('brainNotes'); if(bn2)bn2.textContent=brainN.toLocaleString('en-US');
+    var core=$('bglobeWrap'); if(core){core.classList.add('ping'); setTimeout(function(){core.classList.remove('ping');},600);}
+    var d=DEPT[id]; addReport(id, d.reports[Math.floor(Math.random()*d.reports.length)]);
+  }
+  function spawnPulse(){var id=BRAIN_IDS[Math.floor(Math.random()*BRAIN_IDS.length)], from=nodePos[id], g=$('bpulses'); if(!from||!g)return;
+    var c=document.createElementNS('http://www.w3.org/2000/svg','circle'); c.setAttribute('r','4.5'); c.setAttribute('fill','#C4B5FD'); g.appendChild(c);
+    pulses.push({id:id,t:0,el:c,speed:0.011+Math.random()*0.009});}
+  function brainLoop(){
+    if(state.view!=='brain'){braf=null; return;}
+    for(var i=pulses.length-1;i>=0;i--){var p=pulses[i]; p.t+=p.speed; var from=nodePos[p.id];
+      if(!from||p.t>=1){ if(p.el.parentNode)p.el.parentNode.removeChild(p.el); pulses.splice(i,1); if(from)onReport(p.id); }
+      else{var x=from.x+(bcenter.x-from.x)*p.t, y=from.y+(bcenter.y-from.y)*p.t;
+        p.el.setAttribute('cx',x); p.el.setAttribute('cy',y); p.el.setAttribute('opacity',(0.35+0.65*Math.sin(p.t*Math.PI)).toFixed(2));}}
+    braf=requestAnimationFrame(brainLoop);
+  }
+  setInterval(function(){ if(state.view!=='brain')return; if(reduce)onReport(BRAIN_IDS[Math.floor(Math.random()*BRAIN_IDS.length)]); else spawnPulse(); }, reduce?2600:1300);
+  setInterval(function(){ if(state.view!=='brain')return; synthI=(synthI+1)%SYNTH.length; var el=$('bsynthtext'); if(el){el.style.opacity='0'; setTimeout(function(){el.textContent=SYNTH[synthI]; el.style.opacity='1';},250);} }, 5200);
+  var __gRsT; window.addEventListener('resize',function(){ if(state.view!=='brain')return; layoutBrain(); clearTimeout(__gRsT); __gRsT=setTimeout(initBrainGlobe,300); });
+  $('brainBtn').onclick=showBrain;
+
+  $('brandHome').onclick=showOverview;
+
+  // ================= Toast / clock / brain =================
+  var toastEl=$('toast'),toastT;
+  function toast(msg){toastEl.innerHTML='<span class="ti">●</span>'+msg; toastEl.classList.add('show');
+    clearTimeout(toastT); toastT=setTimeout(function(){toastEl.classList.remove('show');},2600);}
+
+  var MESES=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  function tickClock(){var d=new Date(); $('clock').textContent=pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());}
+  tickClock(); setInterval(tickClock,1000);
+
+  (function brain(){var c=$('brainCanvas'); if(!c)return; var ctx=c.getContext('2d'),W=c.width,H=c.height,nodes=[];
+    for(var i=0;i<7;i++)nodes.push({x:Math.random()*W,y:Math.random()*H,vx:(Math.random()-.5)*.25,vy:(Math.random()-.5)*.25});
+    function frame(){ctx.clearRect(0,0,W,H);
+      for(var i=0;i<nodes.length;i++){var n=nodes[i]; n.x+=n.vx; n.y+=n.vy; if(n.x<0||n.x>W)n.vx*=-1; if(n.y<0||n.y>H)n.vy*=-1;}
+      for(var i=0;i<nodes.length;i++)for(var j=i+1;j<nodes.length;j++){var a=nodes[i],b=nodes[j],d=Math.hypot(a.x-b.x,a.y-b.y);
+        if(d<64){ctx.strokeStyle='rgba(167,139,250,'+(.5*(1-d/64))+')'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();}}
+      for(var i=0;i<nodes.length;i++){ctx.fillStyle='#A78BFA'; ctx.beginPath(); ctx.arc(nodes[i].x,nodes[i].y,2.2,0,6.28); ctx.fill();}
+      if(!reduce)requestAnimationFrame(frame);}
+    frame();})();
+
+  // ================= Seed =================
+  (function seed(){
+    var seeds=[[AGENTS[1],'Cita agendada: <b>hoy 5:00 PM</b>'],[AGENTS[0],'Lead <b>Daniela R.</b> respondido en 44s'],
+      [AGENTS[3],'Resumen matutino enviado a tu WhatsApp'],[AGENTS[2],'<b>Pedro L.</b> reactivado tras 6 días'],
+      [AGENTS[0],'Nuevo lead calificado: interés alto'],[AGENTS[5],'Reseña 5★ recibida de <b>Jorge T.</b>']];
+    seeds.forEach(function(s){var now=new Date(Date.now()-Math.random()*900000);
+      var ts=pad(now.getHours())+':'+pad(now.getMinutes())+':'+pad(now.getSeconds());
+      var ev=document.createElement('div'); ev.className='ev done';
+      ev.innerHTML='<span class="evdot" style="background:'+s[0].color+'"></span><div class="evbody"><div class="evtxt">'+s[1]+'</div><div class="evmeta"><span class="evtag">✓ COMPLETADO</span> · '+s[0].nm+' · '+ts+'</div></div>';
+      feed.appendChild(ev);});
+    $('feedCount').textContent=feedCountN+' eventos hoy';
+    setTimeout(function(){runTask(AGENTS[0],'Procesando: <b>Carlos Méndez</b>','Actualizado: <b>Carlos Méndez</b>',5200);},300);
+    setTimeout(function(){runTask(AGENTS[4],'Procesando: <b>Copy del anuncio</b>','Listo: <b>Copy del anuncio</b>',6800);},900);
+    updateCount();
+  })();
+
+  if(!reduce)setInterval(function(){var w=AGENTS.filter(function(a){return a._rt.status==='working';}).length;
+    if(w<3&&Math.random()<.75)randomAmbient();},2600);
+})();
+</script>
+<script type="module">
+  // Globo giratorio del Cerebro (librería cobe)
+  import createGlobe from 'https://cdn.jsdelivr.net/npm/cobe@0.6.3/+esm';
+  window.__createGlobe = createGlobe;
+  window.dispatchEvent(new Event('cobe-ready'));
+</script>
