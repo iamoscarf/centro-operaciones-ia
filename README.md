@@ -1,6 +1,6 @@
 # 🧠 Centro de Operaciones IA
 
-**Demo interactivo** de un centro de operaciones donde **agentes de IA** trabajan como departamentos de una empresa: atienden clientes, agendan citas, dan seguimiento, generan reportes, crean contenido y más — todo reportando en tiempo real a un **"Cerebro"** central.
+**Demo interactivo** de un centro de operaciones donde **agentes de IA** trabajan como departamentos de una empresa: atienden clientes, agendan citas, dan seguimiento, generan reportes, crean contenido y más  todo reportando en tiempo real a un **"Cerebro"** central.
 
 Pensado para mostrarle a un dueño de negocio, de forma visual y clara, **cómo se vería la IA trabajando dentro de su empresa**.
 
@@ -8,10 +8,10 @@ Pensado para mostrarle a un dueño de negocio, de forma visual y clara, **cómo 
 
 ## ✨ Qué incluye
 
-- **Panel de agentes** — 9 departamentos (Leads, Citas, Seguimiento, Reportes, Contenido, Reseñas, Finanzas, Atención al cliente, Legal). Haz clic en cualquiera para ver a detalle lo que está "haciendo" por cada cliente.
-- **🧠 Cerebro** — un globo giratorio con los 9 departamentos enviándole reportes en vivo, que reúne la información y recomienda el siguiente paso.
-- **🔌 Conectar mis datos** — cómo entrarían los datos reales (WhatsApp, CRM, Excel, Pagos, Base de conocimiento, Plantillas) con un flujo animado.
-- **📈 Resultados / ROI** — gráficas, embudo de conversión y comparativa antes/después, con animaciones de entrada.
+- **Panel de agentes** 9 departamentos (Leads, Citas, Seguimiento, Reportes, Contenido, Reseñas, Finanzas, Atención al cliente, Legal). Haz clic en cualquiera para ver a detalle lo que está "haciendo" por cada cliente.
+- **🧠 Cerebro** un globo giratorio con los 9 departamentos enviándole reportes en vivo, que reúne la información y recomienda el siguiente paso.
+- **🔌 Conectar mis datos**  cómo entrarían los datos reales (WhatsApp, CRM, Excel, Pagos, Base de conocimiento, Plantillas) con un flujo animado.
+- **📈 Resultados / ROI**  gráficas, embudo de conversión y comparativa antes/después, con animaciones de entrada.
 
 ## 🛠️ Tecnología
 
